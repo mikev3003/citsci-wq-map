@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CitSci Water Quality Map — Water Research Observatory</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root {
+    --blue-deep:  #0a2240;
+    --blue-mid:   #1a5276;
+    --blue-light: #2e86c1;
+    --blue-pale:  #aed6f1;
+    --teal:       #17a589;
+    --cream:      #f4f9fd;
+    --ink:        #1a2a3a;
+    --mist:       rgba(255,255,255,0.08);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "DM Sans", sans-serif; background: var(--blue-deep);
+         color: var(--cream); height: 100vh; display: flex;
+         flex-direction: column; overflow: hidden; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.65rem 1.4rem;
+    background: linear-gradient(135deg, #060f1a 0%, var(--blue-deep) 100%);
+    border-bottom: 1px solid rgba(46,134,193,0.35);
+    flex-shrink: 0; gap: 1rem; flex-wrap: wrap;
+  }
+  .header-left { display: flex; align-items: center; gap: 0.85rem; }
+  .logo { font-size: 1.8rem; }
+  h1 { font-family: "Playfair Display", serif; font-size: clamp(0.85rem,2.2vw,1.2rem); line-height: 1.2; }
+  h1 span { display: block; font-family: "DM Sans", sans-serif; font-weight: 300;
+            font-size: 0.68rem; letter-spacing: 0.13em; text-transform: uppercase;
+            color: var(--blue-pale); margin-top: 2px; }
+  .stats { display: flex; gap: 0.8rem; flex-wrap: wrap; }
+  .stat { text-align: center; background: var(--mist);
+          border: 1px solid rgba(46,134,193,0.25); border-radius: 8px; padding: 0.28rem 0.65rem; }
+  .stat-n { font-family: "Playfair Display", serif; font-size: 1.1rem;
+            color: var(--blue-pale); line-height: 1; }
+  .stat-l { font-size: 0.57rem; letter-spacing: 0.1em; text-transform: uppercase;
+            color: rgba(244,249,253,0.45); margin-top: 2px; }
+
+  /* Parameter selector */
+  #param-bar {
+    display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+    padding: 0.4rem 1.4rem;
+    background: rgba(6,15,26,0.92);
+    border-bottom: 1px solid rgba(46,134,193,0.15);
+    flex-shrink: 0;
+  }
+  #param-bar label { font-size: 0.68rem; letter-spacing: 0.08em;
+                     text-transform: uppercase; color: var(--blue-pale); }
+  .param-btn {
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(46,134,193,0.3);
+    color: var(--cream); border-radius: 20px; padding: 0.25rem 0.75rem;
+    font-family: "DM Sans", sans-serif; font-size: 0.75rem; cursor: pointer;
+    transition: all 0.18s;
+  }
+  .param-btn:hover { border-color: var(--blue-light); background: rgba(46,134,193,0.15); }
+  .param-btn.active { background: var(--blue-mid); border-color: var(--blue-light); color: #fff; }
+  .sep { width: 1px; height: 20px; background: rgba(46,134,193,0.2); margin: 0 0.2rem; }
+  #search-input {
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(46,134,193,0.3);
+    color: var(--cream); border-radius: 6px; padding: 0.25rem 0.6rem;
+    font-family: "DM Sans", sans-serif; font-size: 0.78rem; outline: none; min-width: 150px;
+  }
+  #search-input::placeholder { color: rgba(244,249,253,0.3); }
+
+  #map { flex: 1; min-height: 0; }
+
+  /* Popup */
+  .leaflet-popup-content-wrapper {
+    background: var(--blue-deep) !important; border: 1px solid var(--blue-light) !important;
+    border-radius: 12px !important; color: var(--cream) !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+    padding: 0 !important; overflow: hidden !important; width: 280px !important;
+  }
+  .leaflet-popup-tip { background: var(--blue-deep) !important; }
+  .leaflet-popup-content { margin: 0 !important; width: 100% !important; }
+  .leaflet-popup-close-button { color: var(--blue-pale) !important; top:9px !important;
+                                 right:9px !important; font-size:16px !important; z-index:10; }
+  .pp-photo { width:100%; height:150px; object-fit:cover; display:block; background:#060f1a; }
+  .pp-placeholder { width:100%; height:70px;
+    background: linear-gradient(135deg,#0a2240,#1a5276);
+    display:flex; align-items:center; justify-content:center; font-size:2rem; }
+  .pp-body { padding: 0.8rem 1rem 1rem; }
+  .pp-site { font-family:"Playfair Display",serif; font-size:1rem;
+             color: var(--blue-pale); margin-bottom:0.4rem; line-height:1.3; }
+  .pp-meta { font-size:0.71rem; color:rgba(244,249,253,0.6); line-height:1.85; }
+  .pp-meta b { color:rgba(244,249,253,0.9); font-weight:500; }
+  .pp-params {
+    margin-top:0.55rem; display:grid; grid-template-columns:1fr 1fr;
+    gap:0.3rem 0.5rem; background:rgba(46,134,193,0.08);
+    border-radius:8px; padding:0.5rem 0.6rem;
+    border-top:1px solid rgba(46,134,193,0.18);
+  }
+  .pp-param { font-size:0.72rem; }
+  .pp-param-label { color:var(--blue-pale); font-size:0.62rem;
+                    text-transform:uppercase; letter-spacing:0.07em; display:block; }
+  .pp-param-val { color:var(--cream); font-weight:500; font-size:0.82rem; }
+  .pp-notes { margin-top:0.55rem; font-size:0.74rem; font-style:italic;
+              color:rgba(244,249,253,0.5); line-height:1.45;
+              border-top:1px solid rgba(46,134,193,0.15); padding-top:0.5rem; }
+  .pp-drive { display:inline-block; margin-top:0.5rem; font-size:0.68rem;
+              color:var(--blue-pale); text-decoration:none; letter-spacing:0.05em; }
+  .pp-drive:hover { text-decoration:underline; }
+
+  /* Legend */
+  .legend { background:rgba(6,15,26,0.93); border:1px solid rgba(46,134,193,0.25);
+            border-radius:10px; padding:0.6rem 0.85rem; font-size:0.7rem; min-width:150px; }
+  .legend-title { font-family:"Playfair Display",serif; font-size:0.78rem;
+                  color:var(--blue-pale); margin-bottom:0.45rem; }
+  .legend-item { display:flex; align-items:center; gap:0.45rem; margin:3px 0; }
+  .legend-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0;
+                border:1.5px solid rgba(255,255,255,0.3); }
+
+  /* Status */
+  #status { position:fixed; bottom:1rem; left:50%; transform:translateX(-50%);
+            background:var(--blue-deep); border:1px solid var(--blue-mid);
+            color:var(--cream); padding:0.45rem 1.1rem; border-radius:20px;
+            font-size:0.76rem; z-index:9999; display:none;
+            box-shadow:0 4px 18px rgba(0,0,0,0.5); }
+
+  @media(max-width:520px){ header,#param-bar{padding-left:0.9rem;padding-right:0.9rem;} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo">💧</div>
+    <h1>CitSci Water Quality Map<span>Water Research Observatory · ARC</span></h1>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="stat-n" id="s-total">--</div><div class="stat-l">Sites</div></div>
+    <div class="stat"><div class="stat-n" id="s-sources">--</div><div class="stat-l">Source Types</div></div>
+    <div class="stat"><div class="stat-n" id="s-collectors">--</div><div class="stat-l">Collectors</div></div>
+    <div class="stat"><div class="stat-n" id="s-photos">--</div><div class="stat-l">Photos</div></div>
+  </div>
+</header>
+
+<div id="param-bar">
+  <label>Show:</label>
+  <button class="param-btn active" data-param="ec">EC (mS/m)</button>
+  <button class="param-btn" data-param="ph">pH</button>
+  <button class="param-btn" data-param="temp">Temp (°C)</button>
+  <button class="param-btn" data-param="nitrate">Nitrate-N</button>
+  <button class="param-btn" data-param="phosphate">Phosphate-P</button>
+  <button class="param-btn" data-param="source">Water Source</button>
+  <div class="sep"></div>
+  <input type="text" id="search-input" placeholder="Search site or collector..."/>
+</div>
+
+<div id="map"></div>
+<div id="status"></div>
+
+<script>
+// ============================================================
+//  PASTE YOUR GOOGLE SHEET CSV URL HERE
+//  (run getPublicCsvUrl() in Apps Script to get it)
+// ============================================================
+const SHEET_ID = "1rJBZZJD0kuyYCqZQoRJW_gatO3pT_XWbJLwBWFxncm0";
+const GID      = "72389460";
+const CSV_URL  = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&gid=" + GID;
+
+// Column positions matching the Apps Script output
+const C = {
+  id:          0,
+  site:        1,
+  date:        2,
+  time:        3,
+  collector:   4,
+  source:      5,
+  lat:         6,
+  lon:         7,
+  ec:          8,
+  ecDisplay:   9,
+  temp:        10,
+  ph:          11,
+  nitrate:     12,
+  phosphate:   13,
+  ecoli:       14,
+  notes:       15,
+  siteDesc:    16,
+  photoDrive:  17,
+  photoOrig:   17
+};
+
+// ── Map centred on South Africa ──
+const map = L.map("map").setView([-29, 25], 6);
+const streetLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "© OpenStreetMap", maxZoom: 19
+}).addTo(map);
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  { attribution: "© Esri", maxZoom: 19 }
+);
+L.control.layers({
+  "Street map": streetLayer,
+  "Satellite": L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { attribution: "© Esri", maxZoom: 19 })
+}).addTo(map);
+
+const clusterGroup = L.markerClusterGroup({ maxClusterRadius: 35, showCoverageOnHover: false });
+map.addLayer(clusterGroup);
+
+let allRows    = [];
+let activeParam = "ec";
+
+// ── EC colour scale (mS/m) ──
+// SANS 241 drinking water: EC < 70 good, 70-150 acceptable, >150 poor
+const EC_SCALE = [
+  { max: 25,   color: "#1a9850", label: "< 25 (Excellent)" },
+  { max: 70,   color: "#91cf60", label: "25–70 (Good)" },
+  { max: 150,  color: "#fee08b", label: "70–150 (Acceptable)" },
+  { max: 400,  color: "#fc8d59", label: "150–400 (Poor)" },
+  { max: 99999,color: "#d73027", label: "> 400 (Very Poor)" },
+];
+
+const PH_SCALE = [
+  { max: 5,    color: "#d73027", label: "< 5 (Acidic)" },
+  { max: 6.5,  color: "#fc8d59", label: "5–6.5 (Slightly Acidic)" },
+  { max: 8.5,  color: "#1a9850", label: "6.5–8.5 (Optimal)" },
+  { max: 9.5,  color: "#fc8d59", label: "8.5–9.5 (Slightly Alkaline)" },
+  { max: 99,   color: "#d73027", label: "> 9.5 (Alkaline)" },
+];
+
+const TEMP_SCALE = [
+  { max: 10,   color: "#4575b4", label: "< 10°C (Cold)" },
+  { max: 20,   color: "#74add1", label: "10–20°C" },
+  { max: 25,   color: "#1a9850", label: "20–25°C (Optimal)" },
+  { max: 30,   color: "#fee08b", label: "25–30°C (Warm)" },
+  { max: 99,   color: "#d73027", label: "> 30°C (Hot)" },
+];
+
+const NITRATE_SCALE = [
+  { max: 1,    color: "#1a9850", label: "< 1 mg/L" },
+  { max: 5,    color: "#91cf60", label: "1–5 mg/L" },
+  { max: 11,   color: "#fee08b", label: "5–11 mg/L (SANS limit)" },
+  { max: 20,   color: "#fc8d59", label: "11–20 mg/L" },
+  { max: 9999, color: "#d73027", label: "> 20 mg/L" },
+];
+
+const PHOSPHATE_SCALE = [
+  { max: 0.05, color: "#1a9850", label: "< 0.05 mg/L" },
+  { max: 0.2,  color: "#91cf60", label: "0.05–0.2 mg/L" },
+  { max: 1,    color: "#fee08b", label: "0.2–1 mg/L" },
+  { max: 5,    color: "#fc8d59", label: "1–5 mg/L" },
+  { max: 9999, color: "#d73027", label: "> 5 mg/L" },
+];
+
+const SOURCE_COLORS = {
+  "River or Stream":       "#2980b9",
+  "Surface water":         "#2980b9",
+  "Borehole":              "#8e44ad",
+  "Groundwater":           "#8e44ad",
+  "Groundwater spring":    "#9b59b6",
+  "Dam":                   "#1abc9c",
+  "Irrigation Canal or Farm Dam": "#16a085",
+  "Natural Lake":          "#27ae60",
+  "Estuary":               "#d4ac0d",
+  "Marine":                "#2c3e50",
+  "Drinking Water":        "#e74c3c",
+  "Water Tank":            "#e67e22",
+  "Other":                 "#95a5a6",
+};
+
+function getScaleColor(value, scale) {
+  var v = parseFloat(value);
+  if (isNaN(v)) return "#7f8c8d";
+  for (var i = 0; i < scale.length; i++) {
+    if (v <= scale[i].max) return scale[i].color;
+  }
+  return scale[scale.length-1].color;
+}
+
+function getColor(row) {
+  switch(activeParam) {
+    case "ec":         return getScaleColor(row[C.ec],         EC_SCALE);
+    case "ph":         return getScaleColor(row[C.ph],         PH_SCALE);
+    case "temp":       return getScaleColor(row[C.temp],       TEMP_SCALE);
+    case "nitrate":    return getScaleColor(row[C.nitrate],    NITRATE_SCALE);
+    case "phosphate":  return getScaleColor(row[C.phosphate],  PHOSPHATE_SCALE);
+    case "source":     return SOURCE_COLORS[row[C.source]] || "#7f8c8d";
+    default:           return "#2e86c1";
+  }
+}
+
+function getScale() {
+  switch(activeParam) {
+    case "ec":         return EC_SCALE;
+    case "ph":         return PH_SCALE;
+    case "temp":       return TEMP_SCALE;
+    case "nitrate":    return NITRATE_SCALE;
+    case "phosphate":  return PHOSPHATE_SCALE;
+    case "source":     return Object.entries(SOURCE_COLORS).map(function(e){
+                         return { label: e[0], color: e[1] }; });
+    default:           return [];
+  }
+}
+
+// ── Legend control ──
+var legendControl = L.control({ position: "bottomright" });
+legendControl.onAdd = function() {
+  var d = L.DomUtil.create("div", "legend");
+  d.id = "legend-box";
+  return d;
+};
+legendControl.addTo(map);
+
+function updateLegend() {
+  var d = document.getElementById("legend-box");
+  if (!d) return;
+  var labels = { ec:"EC (mS/m)", ph:"pH", temp:"Temp (°C)",
+                 nitrate:"Nitrate-N (mg/L)", phosphate:"Phosphate-P (mg/L)", source:"Water Source" };
+  var scale = getScale();
+  var html = "<div class='legend-title'>" + labels[activeParam] + "</div>";
+  scale.forEach(function(s) {
+    html += "<div class='legend-item'><div class='legend-dot' style='background:" + s.color + "'></div>"
+          + "<span>" + s.label + "</span></div>";
+  });
+  d.innerHTML = html;
+}
+
+// ── Drive thumbnail ──
+function driveThumb(url) {
+  if (!url) return "";
+  var m = url.match(/\/file\/d\/([^\/]+)\//);
+  if (!m) return "";
+  return "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w600";
+}
+
+// ── Load data ──
+function load() {
+  if (SHEET_ID === "PASTE_YOUR_SHEET_ID_HERE") { showDemo(); return; }
+  toast("Loading water quality data...", true);
+  Papa.parse(CSV_URL, {
+    download: true, header: false, skipEmptyLines: true,
+    complete: function(r) {
+      allRows = r.data.slice(1);
+      render();
+      toast("", false);
+    },
+    error: function(e) {
+      toast("Could not load data — check CSV URL", true);
+      console.error(e);
+    }
+  });
+}
+
+// ── Render ──
+function render() {
+  clusterGroup.clearLayers();
+  var q = document.getElementById("search-input").value.toLowerCase();
+
+  var total = 0, photos = 0;
+  var sourceSet = new Set(), collectorSet = new Set();
+
+  allRows.forEach(function(r) {
+    var lat = parseFloat(r[C.lat]);
+    var lon = parseFloat(r[C.lon]);
+    if (isNaN(lat) || isNaN(lon)) return;
+
+    var site      = r[C.site]      || "";
+    var collector = r[C.collector] || "";
+    var source    = r[C.source]    || "";
+    var rawPhoto  = r[C.photoDrive] || r[C.photoOrig] || "";
+
+    if (q && !site.toLowerCase().includes(q) && !collector.toLowerCase().includes(q)) return;
+
+    var color = getColor(r);
+    var icon = L.divIcon({
+      className: "",
+      html: "<div style='width:14px;height:14px;background:" + color + ";border:2px solid rgba(255,255,255,0.7);border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.4)'></div>",
+      iconSize: [14,14], iconAnchor: [7,7], popupAnchor: [0,-10]
+    });
+
+    var m = L.marker([lat, lon], { icon: icon });
+    m.bindPopup(makePopup(r, driveThumb(rawPhoto), rawPhoto), { maxWidth: 290 });
+    clusterGroup.addLayer(m);
+
+    total++;
+    sourceSet.add(source);
+    collectorSet.add(collector);
+    if (rawPhoto) photos++;
+  });
+
+  document.getElementById("s-total").textContent      = total;
+  document.getElementById("s-sources").textContent    = sourceSet.size;
+  document.getElementById("s-collectors").textContent = collectorSet.size;
+  document.getElementById("s-photos").textContent     = photos;
+  updateLegend();
+}
+
+function makePopup(r, photoThumb, rawPhoto) {
+  var site      = r[C.site]      || "Unnamed Site";
+  var date      = r[C.date]      || "";
+  var time      = r[C.time]      || "";
+  var collector = r[C.collector] || "Unknown";
+  var source    = r[C.source]    || "";
+  var ec        = r[C.ec]        || "";
+  var ecDisp    = r[C.ecDisplay] || ec;
+  var temp      = r[C.temp]      || "";
+  var ph        = r[C.ph]        || "";
+  var nitrate   = r[C.nitrate]   || "";
+  var phosphate = r[C.phosphate] || "";
+  var ecoli     = r[C.ecoli]     || "";
+  var notes     = r[C.notes]     || r[C.siteDesc] || "";
+
+  var dateStr = date ? date.slice(0,10) : "--";
+  var timeStr = time ? time.slice(0,5) : "";
+
+  var photoHtml = photoThumb
+    ? "<img class='pp-photo' src='" + photoThumb + "' alt='Site photo' onerror=\"this.style.display='none'\">"
+    : "<div class='pp-placeholder'>&#x1F4A7;</div>";
+
+  var driveLink = rawPhoto
+    ? "<a class='pp-drive' href='" + rawPhoto + "' target='_blank'>&#x1F4F7; View full photo &rarr;</a>" : "";
+
+  var notesHtml = notes
+    ? "<div class='pp-notes'>" + esc(notes) + "</div>" : "";
+
+  function paramCell(label, val, unit) {
+    if (!val || val === "NaN" || val === "NAN") return "";
+    return "<div class='pp-param'><span class='pp-param-label'>" + label + "</span>"
+         + "<span class='pp-param-val'>" + val + (unit ? " " + unit : "") + "</span></div>";
+  }
+
+  var params = paramCell("EC", ecDisp, "") +
+               paramCell("Temp", temp, "°C") +
+               paramCell("pH", ph, "") +
+               paramCell("Nitrate-N", nitrate, "mg/L") +
+               paramCell("Phosphate-P", phosphate, "mg/L") +
+               paramCell("E.coli", ecoli, "cfu/100ml");
+
+  return photoHtml +
+    "<div class='pp-body'>" +
+      "<div class='pp-site'>" + esc(site) + "</div>" +
+      "<div class='pp-meta'>" +
+        "<b>Source:</b> " + esc(source) + "<br>" +
+        "<b>Collector:</b> " + esc(collector) + "<br>" +
+        "<b>Date:</b> " + dateStr + (timeStr ? " at " + timeStr : "") +
+      "</div>" +
+      (params ? "<div class='pp-params'>" + params + "</div>" : "") +
+      notesHtml +
+      driveLink +
+    "</div>";
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function toast(msg, show) {
+  var el = document.getElementById("status");
+  el.textContent = msg;
+  el.style.display = show ? "block" : "none";
+}
+
+// ── Demo mode with real data from the XLS ──
+function showDemo() {
+  var notice = L.control({ position: "topleft" });
+  notice.onAdd = function() {
+    var d = L.DomUtil.create("div");
+    d.style.cssText = "background:rgba(6,15,26,0.95);border:1px solid #e9c46a;border-radius:10px;padding:0.7rem 1rem;max-width:255px;font-size:0.74rem;color:#f4f9fd;line-height:1.55;";
+    d.innerHTML = "<b style='color:#e9c46a'>Demo mode</b><br>Paste your Sheet ID and GID into the CSV_URL variable to show live data. Displaying sample records from your existing dataset.";
+    return d;
+  };
+  notice.addTo(map);
+
+  var demo = [
+    { site:"Groenkloof borehole", lat:-25.773257, lon:28.212563, ec:19, ph:5.5, temp:"", source:"Borehole", notes:"" },
+    { site:"Roodeplaat River",    lat:-25.602004, lon:28.372679, ec:96, ph:6,   temp:11.7, source:"River or Stream", notes:"" },
+    { site:"R555 Bridge",         lat:-25.532606, lon:28.102857, ec:31, ph:6,   temp:20.3, source:"River or Stream", notes:"EC and Nitrate measured" },
+    { site:"Rietvlei 1st bridge", lat:-25.901225, lon:28.314972, ec:61, ph:5.5, temp:13.5, source:"River or Stream", notes:"Water grey, smelt like sewage" },
+    { site:"Jagersfontein mine",  lat:-29.777679, lon:25.435861, ec:605,ph:"",  temp:"",   source:"Surface water",  notes:"Mine water" },
+    { site:"Loskop Dam wall",     lat:-25.417775, lon:29.361328, ec:"", ph:"",  temp:"",   source:"Dam",            notes:"" },
+    { site:"Fish River Canyon",   lat:-27.622525, lon:17.602259, ec:76, ph:5,   temp:17.5, source:"River or Stream", notes:"" },
+    { site:"Swartvlei Estuary",   lat:-34.021256, lon:22.782541, ec:">2000",ph:7,temp:14.6,source:"Estuary",       notes:"Salt water, mouth closed" },
+    { site:"Mossel Bay Ocean",    lat:-34.183800, lon:22.136700, ec:">2000",ph:"",temp:17, source:"Marine",         notes:"EC measure" },
+    { site:"Luvuvhu River",       lat:-22.971172, lon:30.603815, ec:15, ph:6.2, temp:24.1, source:"River or Stream", notes:"" },
+  ];
+
+  var fakeRows = demo.map(function(d) {
+    var r = new Array(20).fill("");
+    r[C.site] = d.site; r[C.lat] = d.lat; r[C.lon] = d.lon;
+    r[C.ec] = d.ec; r[C.ecDisplay] = d.ec ? d.ec + " mS/m" : "";
+    r[C.ph] = d.ph; r[C.temp] = d.temp; r[C.source] = d.source;
+    r[C.notes] = d.notes; r[C.collector] = "Demo";
+    return r;
+  });
+  allRows = fakeRows;
+  render();
+  document.getElementById("s-total").textContent      = demo.length;
+  document.getElementById("s-sources").textContent    = new Set(demo.map(function(d){return d.source;})).size;
+  document.getElementById("s-collectors").textContent = 1;
+  document.getElementById("s-photos").textContent     = 0;
+}
+
+// ── Wire up controls ──
+document.querySelectorAll(".param-btn").forEach(function(btn) {
+  btn.addEventListener("click", function() {
+    document.querySelectorAll(".param-btn").forEach(function(b){ b.classList.remove("active"); });
+    btn.classList.add("active");
+    activeParam = btn.dataset.param;
+    render();
+  });
+});
+document.getElementById("search-input").addEventListener("input", function() { render(); });
+
+load();
+</script>
+</body>
+</html>
