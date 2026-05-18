@@ -12,6 +12,7 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/3.0.1/chartjs-plugin-annotation.min.js"></script>
 <style>
   :root {
     --blue-deep:  #0a2240;
@@ -488,11 +489,11 @@ const C = {
 const map = L.map("map").setView([-29, 25], 6);
 const streetLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap", maxZoom: 19
-}).addTo(map);
+});
 const satelliteLayer = L.tileLayer(
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
   { attribution: "© Esri", maxZoom: 19 }
-);
+).addTo(map);
 L.control.layers({ "Street map": streetLayer, "Satellite": satelliteLayer }).addTo(map);
 
 const clusterGroup = L.markerClusterGroup({ maxClusterRadius: 35, showCoverageOnHover: false });
@@ -1124,7 +1125,7 @@ function cpRender() {
 
     var siteKeys = Object.keys(bySite);
 
-    // Always recreate canvas fresh (avoids stale reference issues)
+    // Always recreate canvas fresh
     wrap.innerHTML = "";
     if (siteKeys.length === 0) {
       wrap.innerHTML = "<div class='cp-no-data'>" + (cpSelectedSites.size === 0 ? "Select a site →" : "No data for this parameter") + "</div>";
@@ -1133,63 +1134,71 @@ function cpRender() {
     var canvas = document.createElement("canvas");
     wrap.appendChild(canvas);
 
-    // Collect all x labels across sites
+    // Build unified sorted x-axis labels across all selected sites
     var allX = [];
     siteKeys.forEach(function(s){ bySite[s].forEach(function(pt){ allX.push(pt.x); }); });
     allX = Array.from(new Set(allX)).sort();
 
-    // Max y for band capping
+    // Max y for scaling
     var maxY = 0;
     siteKeys.forEach(function(s){ bySite[s].forEach(function(pt){ if(pt.y>maxY) maxY=pt.y; }); });
     if (p.bands) p.bands.forEach(function(b){ if(b.to<10000&&b.to>maxY) maxY=b.to; });
     if (maxY === 0) maxY = 1;
+    var yMax = p.yMax !== undefined ? p.yMax : maxY * 1.2;
 
-    // Band datasets
-    var bandDs = [];
-    if (cpShowBands && p.bands && p.bands.length && allX.length) {
-      p.bands.forEach(function(band) {
-        var capTo = band.to > 10000 ? maxY * 1.15 : band.to;
-        bandDs.push({
-          label:"_b", data: allX.map(function(x){ return {x:x, y:band.from}; }),
-          borderColor:"transparent", backgroundColor: band.bg,
-          pointRadius:0, borderWidth:0, fill:"+1", tension:0,
-        });
-        bandDs.push({
-          label:"_bt", data: allX.map(function(x){ return {x:x, y:capTo}; }),
-          borderColor:"transparent", backgroundColor:"transparent",
-          pointRadius:0, borderWidth:0, fill:false, tension:0,
-        });
-      });
-    }
-
-    // Site datasets
+    // Bar datasets — one bar per site, values aligned to allX labels
+    // If a site has multiple readings on the same date, average them
     var siteDs = siteKeys.map(function(site) {
       var col = cpSiteColors[site] || "#7f8c8d";
+      var dataByX = {};
+      var countByX = {};
+      bySite[site].forEach(function(pt) {
+        if (dataByX[pt.x] === undefined) { dataByX[pt.x] = 0; countByX[pt.x] = 0; }
+        dataByX[pt.x] += pt.y;
+        countByX[pt.x]++;
+      });
+      // Average
+      Object.keys(dataByX).forEach(function(x){ dataByX[x] = dataByX[x] / countByX[x]; });
       return {
         label: site,
-        data: bySite[site],
+        data: allX.map(function(x){ return dataByX[x] !== undefined ? parseFloat(dataByX[x].toFixed(3)) : null; }),
+        backgroundColor: col + "cc",
         borderColor: col,
-        backgroundColor: col + "18",
-        pointBackgroundColor: col,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        borderWidth: 2,
-        tension: 0.35,
-        fill: false,
+        borderWidth: 1,
+        borderRadius: 3,
+        skipNull: true,
       };
     });
 
+    // Threshold band annotations (horizontal coloured regions via chartArea plugin)
+    var annotations = {};
+    if (cpShowBands && p.bands && p.bands.length) {
+      p.bands.forEach(function(band, i) {
+        var capTo = band.to > 10000 ? yMax : Math.min(band.to, yMax);
+        var capFrom = Math.min(band.from, yMax);
+        if (capFrom >= yMax) return;
+        annotations["band" + i] = {
+          type: "box",
+          xScaleID: "x",
+          yScaleID: "y",
+          yMin: capFrom,
+          yMax: capTo,
+          backgroundColor: band.bg,
+          borderWidth: 0,
+        };
+      });
+    }
+
     cpCharts[p.key] = new Chart(canvas, {
-      type: "line",
-      data: { datasets: bandDs.concat(siteDs) },
+      type: "bar",
+      data: { labels: allX, datasets: siteDs },
       options: {
         responsive: true, maintainAspectRatio: false,
         animation: { duration: 350 },
-        parsing: false,
         plugins: {
-          legend: { display: false },
+          legend: { display: siteKeys.length > 1,
+            labels: { color:"rgba(240,246,252,0.6)", font:{size:9}, boxWidth:10 } },
           tooltip: {
-            filter: function(i){ return !i.dataset.label.startsWith("_"); },
             backgroundColor: "#081320",
             borderColor: "rgba(46,134,193,0.35)", borderWidth: 1,
             titleColor: "#aed6f1", bodyColor: "#f0f6fc",
@@ -1197,23 +1206,23 @@ function cpRender() {
             bodyFont:  { family:"DM Sans", size:11 },
             padding: 9,
             callbacks: {
-              title: function(items){ return items[0].dataset.label; },
+              title: function(items){ return items[0].label; },
               label: function(item){
-                return item.parsed.x + ":  " + item.parsed.y.toFixed(2) + (p.unit ? " " + p.unit : "");
+                return item.dataset.label + ":  " + (item.parsed.y !== null ? item.parsed.y.toFixed(2) : "—") + (p.unit ? " " + p.unit : "");
               }
             }
-          }
+          },
+          annotation: annotations,
         },
         scales: {
           x: {
-            type: "category",
-            ticks: { color:"rgba(240,246,252,0.4)", font:{size:9}, maxRotation:40, autoSkip:true, maxTicksLimit:7 },
+            ticks: { color:"rgba(240,246,252,0.4)", font:{size:9}, maxRotation:40, autoSkip:true, maxTicksLimit:8 },
             grid: { color:"rgba(46,134,193,0.07)" },
             border: { color:"rgba(46,134,193,0.12)" },
           },
           y: {
             min: p.yMin !== undefined ? p.yMin : 0,
-            max: p.yMax !== undefined ? p.yMax : maxY * 1.15,
+            max: yMax,
             ticks: { color:"rgba(240,246,252,0.4)", font:{size:9}, maxTicksLimit:5 },
             grid: { color:"rgba(46,134,193,0.07)" },
             border: { color:"rgba(46,134,193,0.12)" },
