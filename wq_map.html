@@ -11,6 +11,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
     --blue-deep:  #0a2240;
@@ -74,23 +75,54 @@
   }
   #search-input::placeholder { color: rgba(244,249,253,0.3); }
 
+  /* Info button */
+  #info-btn {
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(46,134,193,0.3);
+    color: var(--blue-pale); border-radius: 20px; padding: 0.25rem 0.7rem;
+    font-family: "DM Sans", sans-serif; font-size: 0.75rem; cursor: pointer;
+    transition: all 0.18s; margin-left: auto;
+  }
+  #info-btn:hover { border-color: var(--blue-light); background: rgba(46,134,193,0.15); color:#fff; }
+
   #map { flex: 1; min-height: 0; }
 
-  /* Popup */
+  /* ── Popup ── */
   .leaflet-popup-content-wrapper {
     background: var(--blue-deep) !important; border: 1px solid var(--blue-light) !important;
     border-radius: 12px !important; color: var(--cream) !important;
     box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
-    padding: 0 !important; overflow: hidden !important; width: 280px !important;
+    padding: 0 !important; overflow: hidden !important; width: 360px !important;
   }
   .leaflet-popup-tip { background: var(--blue-deep) !important; }
   .leaflet-popup-content { margin: 0 !important; width: 100% !important; }
   .leaflet-popup-close-button { color: var(--blue-pale) !important; top:9px !important;
                                  right:9px !important; font-size:16px !important; z-index:10; }
-  .pp-photo { width:100%; height:150px; object-fit:cover; display:block; background:#060f1a; }
-  .pp-placeholder { width:100%; height:70px;
+
+  /* Bigger photo */
+  .pp-photo { width:100%; height:220px; object-fit:cover; display:block;
+              background:#060f1a; cursor:pointer; transition: opacity 0.15s; }
+  .pp-photo:hover { opacity:0.9; }
+  .pp-placeholder { width:100%; height:80px;
     background: linear-gradient(135deg,#0a2240,#1a5276);
     display:flex; align-items:center; justify-content:center; font-size:2rem; }
+
+  /* Photo expand overlay */
+  #photo-overlay {
+    display:none; position:fixed; inset:0; z-index:9999;
+    background:rgba(0,0,0,0.88); align-items:center; justify-content:center;
+    flex-direction:column; gap:1rem;
+  }
+  #photo-overlay.open { display:flex; }
+  #photo-overlay img { max-width:90vw; max-height:82vh; border-radius:8px;
+                        box-shadow:0 12px 48px rgba(0,0,0,0.8); object-fit:contain; }
+  #photo-overlay-close {
+    position:fixed; top:1.2rem; right:1.5rem;
+    background:rgba(255,255,255,0.12); border:none; color:#fff;
+    font-size:1.6rem; line-height:1; cursor:pointer; border-radius:50%;
+    width:2.4rem; height:2.4rem; display:flex; align-items:center; justify-content:center;
+  }
+  #photo-overlay-caption { color:rgba(255,255,255,0.6); font-size:0.8rem; }
+
   .pp-body { padding: 0.8rem 1rem 1rem; }
   .pp-site { font-family:"Playfair Display",serif; font-size:1rem;
              color: var(--blue-pale); margin-bottom:0.4rem; line-height:1.3; }
@@ -106,21 +138,67 @@
   .pp-param-label { color:var(--blue-pale); font-size:0.62rem;
                     text-transform:uppercase; letter-spacing:0.07em; display:block; }
   .pp-param-val { color:var(--cream); font-weight:500; font-size:0.82rem; }
+  .pp-param-val.warn  { color:#fc8d59; }
+  .pp-param-val.alert { color:#d73027; }
+  .pp-param-val.good  { color:#1a9850; }
   .pp-notes { margin-top:0.55rem; font-size:0.74rem; font-style:italic;
               color:rgba(244,249,253,0.5); line-height:1.45;
               border-top:1px solid rgba(46,134,193,0.15); padding-top:0.5rem; }
+
+  /* Threshold comments */
+  .pp-comments { margin-top:0.55rem; border-top:1px solid rgba(46,134,193,0.18);
+                 padding-top:0.5rem; display:flex; flex-direction:column; gap:0.3rem; }
+  .pp-comment { display:flex; gap:0.4rem; align-items:flex-start;
+                font-size:0.7rem; line-height:1.4; }
+  .pp-comment-icon { flex-shrink:0; font-weight:700; font-size:0.72rem;
+                     margin-top:0.05rem; }
+  .pp-comment-good  { color:rgba(16,124,16,0.9); }
+  .pp-comment-warn  { color:#efb199; }
+  .pp-comment-alert { color:#fd8a8a; }
+  .pp-comment-good  .pp-comment-icon { color:#107C10; }
+  .pp-comment-warn  .pp-comment-icon { color:#e06234; }
+  .pp-comment-alert .pp-comment-icon { color:#ff6b6b; }
+  .pp-comment-summary { font-size:0.7rem; color:#107C10; font-weight:500; }
   .pp-drive { display:inline-block; margin-top:0.5rem; font-size:0.68rem;
               color:var(--blue-pale); text-decoration:none; letter-spacing:0.05em; }
   .pp-drive:hover { text-decoration:underline; }
 
   /* Legend */
   .legend { background:rgba(6,15,26,0.93); border:1px solid rgba(46,134,193,0.25);
-            border-radius:10px; padding:0.6rem 0.85rem; font-size:0.7rem; min-width:150px; }
+            border-radius:10px; padding:0.6rem 0.85rem; font-size:0.7rem; min-width:160px; }
   .legend-title { font-family:"Playfair Display",serif; font-size:0.78rem;
                   color:var(--blue-pale); margin-bottom:0.45rem; }
+  .legend-threshold { font-size:0.6rem; color:rgba(174,214,241,0.55);
+                      margin-bottom:0.4rem; line-height:1.4; font-style:italic; }
   .legend-item { display:flex; align-items:center; gap:0.45rem; margin:3px 0; }
-  .legend-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0;
-                border:1.5px solid rgba(255,255,255,0.3); }
+  .legend-dot { width:14px; height:14px; border-radius:50%; flex-shrink:0;
+                box-shadow: 0 0 0 1.5px rgba(255,255,255,0.25); }
+
+  /* Guidelines panel */
+  #guidelines-panel {
+    display:none; position:fixed; top:0; right:0; bottom:0; width:340px;
+    background:rgba(6,15,26,0.97); border-left:1px solid rgba(46,134,193,0.3);
+    z-index:2000; overflow-y:auto; padding:1.2rem 1.1rem 2rem;
+    box-shadow:-6px 0 24px rgba(0,0,0,0.5);
+  }
+  #guidelines-panel.open { display:block; }
+  .gl-close { float:right; background:none; border:none; color:var(--blue-pale);
+               font-size:1.4rem; cursor:pointer; line-height:1; margin-top:-2px; }
+  .gl-title { font-family:"Playfair Display",serif; font-size:1rem;
+              color:var(--blue-pale); margin-bottom:1rem; }
+  .gl-section { margin-bottom:1.1rem; }
+  .gl-param { font-size:0.75rem; font-weight:600; text-transform:uppercase;
+              letter-spacing:0.09em; color:var(--blue-pale); border-bottom:1px solid rgba(46,134,193,0.2);
+              padding-bottom:0.3rem; margin-bottom:0.5rem; }
+  .gl-row { display:flex; justify-content:space-between; align-items:baseline;
+            font-size:0.72rem; margin:0.25rem 0; }
+  .gl-row span:first-child { color:rgba(244,249,253,0.6); }
+  .gl-row span:last-child  { font-weight:500; }
+  .gl-note { font-size:0.66rem; color:rgba(244,249,253,0.4); margin-top:0.3rem;
+             font-style:italic; line-height:1.4; }
+  .c-good  { color:#1a9850; }
+  .c-warn  { color:#fee08b; }
+  .c-alert { color:#d73027; }
 
   /* Status */
   #status { position:fixed; bottom:1rem; left:50%; transform:translateX(-50%);
@@ -129,7 +207,127 @@
             font-size:0.76rem; z-index:9999; display:none;
             box-shadow:0 4px 18px rgba(0,0,0,0.5); }
 
+  /* ── Charts slide-out panel ── */
+  #charts-panel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 780px; max-width: 96vw;
+    background: rgba(6,12,22,0.98);
+    border-left: 1px solid rgba(46,134,193,0.3);
+    z-index: 3000; display: flex; flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.32s cubic-bezier(0.4,0,0.2,1);
+    box-shadow: -8px 0 40px rgba(0,0,0,0.6);
+  }
+  #charts-panel.open { transform: translateX(0); }
+
+  #charts-panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.8rem 1.2rem 0.7rem;
+    border-bottom: 1px solid rgba(46,134,193,0.2);
+    flex-shrink: 0;
+  }
+  .cp-title { font-family:"Playfair Display",serif; font-size:1rem; color:var(--blue-pale); }
+  .cp-close { background:none; border:none; color:var(--blue-pale); font-size:1.4rem;
+               cursor:pointer; line-height:1; padding:0.1rem 0.3rem; }
+  .cp-close:hover { color:var(--cream); }
+
+  /* Site selector row */
+  #cp-site-bar {
+    display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+    padding: 0.55rem 1.2rem;
+    border-bottom: 1px solid rgba(46,134,193,0.12);
+    flex-shrink: 0; background: rgba(10,22,40,0.6);
+  }
+  #cp-site-bar label { font-size:0.63rem; letter-spacing:0.1em; text-transform:uppercase;
+                        color:var(--blue-pale); white-space:nowrap; }
+  .cp-site-chip {
+    display:flex; align-items:center; gap:0.3rem;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(46,134,193,0.25);
+    border-radius: 14px; padding: 0.18rem 0.6rem 0.18rem 0.45rem;
+    font-size: 0.72rem; color: rgba(244,249,253,0.6); cursor: pointer;
+    transition: all 0.15s; user-select:none;
+  }
+  .cp-site-chip:hover { border-color: var(--blue-light); color: var(--cream); }
+  .cp-site-chip.active { color: var(--cream); border-color: transparent; }
+  .cp-site-chip .chip-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; opacity:0.3; }
+  .cp-site-chip.active .chip-dot { opacity:1; }
+  #cp-site-search {
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(46,134,193,0.25);
+    color: var(--cream); border-radius: 6px; padding: 0.2rem 0.5rem;
+    font-family: "DM Sans", sans-serif; font-size: 0.72rem; outline: none; width: 130px;
+  }
+  #cp-site-search::placeholder { color: rgba(244,249,253,0.25); }
+  .cp-mode-btn {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(46,134,193,0.25);
+    color: rgba(244,249,253,0.5); border-radius: 14px; padding: 0.18rem 0.6rem;
+    font-size: 0.68rem; cursor:pointer; transition:all 0.15s;
+  }
+  .cp-mode-btn.active { background:rgba(46,134,193,0.2); border-color:var(--blue-light); color:var(--cream); }
+
+  /* Date range */
+  #cp-date-bar {
+    display:flex; align-items:center; gap:0.5rem;
+    padding:0.35rem 1.2rem;
+    border-bottom:1px solid rgba(46,134,193,0.12);
+    flex-shrink:0; background:rgba(8,18,32,0.5);
+    font-size:0.68rem; color:var(--blue-pale);
+  }
+  #cp-date-bar input[type=date] {
+    background:rgba(255,255,255,0.05); border:1px solid rgba(46,134,193,0.2);
+    color:var(--cream); border-radius:5px; padding:0.18rem 0.4rem;
+    font-size:0.68rem; outline:none;
+  }
+  #cp-date-bar input[type=date]::-webkit-calendar-picker-indicator { filter:invert(0.5); }
+  .cp-bands-toggle { display:flex; align-items:center; gap:0.35rem; margin-left:auto;
+                      font-size:0.66rem; color:rgba(244,249,253,0.45); cursor:pointer; }
+  .cp-bands-toggle input { accent-color:var(--teal); }
+
+  /* Legend strip */
+  #cp-legend {
+    display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;
+    padding:0.3rem 1.2rem; min-height:28px;
+    font-size:0.68rem; color:rgba(244,249,253,0.4);
+    border-bottom:1px solid rgba(46,134,193,0.08);
+    flex-shrink:0;
+  }
+  .cp-legend-chip { display:flex; align-items:center; gap:0.3rem; color:var(--cream); font-size:0.68rem; }
+  .cp-legend-dot { width:8px; height:8px; border-radius:50%; }
+
+  /* Chart grid */
+  #cp-charts {
+    flex:1; overflow-y:auto; padding:0.9rem 1.1rem;
+    display:grid; grid-template-columns:1fr 1fr; gap:0.85rem; align-content:start;
+  }
+  #cp-charts::-webkit-scrollbar { width:4px; }
+  #cp-charts::-webkit-scrollbar-thumb { background:rgba(46,134,193,0.2); border-radius:2px; }
+
+  .cp-card {
+    background:rgba(13,30,50,0.8); border:1px solid rgba(46,134,193,0.14);
+    border-radius:10px; padding:0.75rem 0.85rem 0.7rem;
+    display:flex; flex-direction:column; gap:0.3rem;
+    position:relative; overflow:hidden;
+  }
+  .cp-card::before {
+    content:""; position:absolute; top:0; left:0; right:0; height:2px;
+    background:var(--cp-color, var(--blue-light)); opacity:0.6;
+  }
+  .cp-card-header { display:flex; justify-content:space-between; align-items:baseline; }
+  .cp-card-title { font-family:"Playfair Display",serif; font-size:0.82rem; color:var(--blue-pale); }
+  .cp-card-unit { font-size:0.6rem; color:rgba(174,214,241,0.45); letter-spacing:0.04em; }
+  .cp-card-hint { font-size:0.58rem; color:rgba(244,249,253,0.25); font-style:italic; }
+  .cp-card-wrap { position:relative; height:155px; }
+  .cp-no-data { display:flex; align-items:center; justify-content:center;
+                height:155px; font-size:0.72rem; color:rgba(244,249,253,0.25); font-style:italic; }
+
+  #chart-btn {
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(46,134,193,0.3);
+    color: var(--blue-pale); border-radius: 20px; padding: 0.25rem 0.7rem;
+    font-family: "DM Sans", sans-serif; font-size: 0.75rem; cursor: pointer;
+    transition: all 0.18s;
+  }
+  #chart-btn:hover, #chart-btn.active { border-color: var(--blue-light); background: rgba(46,134,193,0.15); color:#fff; }
+
   @media(max-width:520px){ header,#param-bar{padding-left:0.9rem;padding-right:0.9rem;} }
+
 </style>
 </head>
 <body>
@@ -137,35 +335,99 @@
 <header>
   <div class="header-left">
     <div class="logo">💧</div>
-    <h1>CitSci Water Quality Map<span>Water Research Observatory · ARC</span></h1>
+    <h1>CitSci Water Quality Map<span>Water Research Observatory</span></h1>
   </div>
   <div class="stats">
     <div class="stat"><div class="stat-n" id="s-total">--</div><div class="stat-l">Sites</div></div>
     <div class="stat"><div class="stat-n" id="s-sources">--</div><div class="stat-l">Source Types</div></div>
     <div class="stat"><div class="stat-n" id="s-collectors">--</div><div class="stat-l">Collectors</div></div>
     <div class="stat"><div class="stat-n" id="s-photos">--</div><div class="stat-l">Photos</div></div>
+    <a href="wq_charts.html" style="background:var(--mist);border:1px solid rgba(46,134,193,0.25);border-radius:8px;padding:0.28rem 0.65rem;font-size:0.72rem;color:var(--blue-pale);text-decoration:none;display:flex;align-items:center;gap:0.3rem;">📈 Charts</a>
   </div>
 </header>
 
 <div id="param-bar">
   <label>Show:</label>
-  <button class="param-btn active" data-param="ec">EC (mS/m)</button>
+  <button class="param-btn active" data-param="ec">EC</button>
   <button class="param-btn" data-param="ph">pH</button>
-  <button class="param-btn" data-param="temp">Temp (°C)</button>
+  <button class="param-btn" data-param="temp">Temperature</button>
   <button class="param-btn" data-param="nitrate">Nitrate-N</button>
   <button class="param-btn" data-param="phosphate">Phosphate-P</button>
+  <button class="param-btn" data-param="ecoli">E. coli</button>
   <button class="param-btn" data-param="source">Water Source</button>
   <div class="sep"></div>
   <input type="text" id="search-input" placeholder="Search site or collector..."/>
+  <button id="info-btn">ℹ Guidelines</button>
+  <button id="chart-btn">📈 Charts</button>
 </div>
 
 <div id="map"></div>
 <div id="status"></div>
 
+<!-- Photo lightbox overlay -->
+<div id="photo-overlay">
+  <button id="photo-overlay-close">✕</button>
+  <img id="photo-overlay-img" src="" alt="Site photo"/>
+  <div id="photo-overlay-caption"></div>
+</div>
+
+<!-- Guidelines panel -->
+<div id="guidelines-panel">
+  <button class="gl-close" id="gl-close-btn">✕</button>
+  <div class="gl-title">📋 Guidelines &amp; Thresholds</div>
+  <div style="font-size:0.65rem;color:rgba(174,214,241,0.5);margin-bottom:1rem;">SANS 241:2024 · DWS Guidelines Vol. 4</div>
+
+  <div class="gl-section">
+    <div class="gl-param">EC — Electrical Conductivity (mS/m)</div>
+    <div class="gl-row"><span>Drinking water limit (SANS 241)</span><span class="c-alert">≤ 170 mS/m</span></div>
+    <div class="gl-row"><span>Irrigation — ideal</span><span class="c-good">&lt; 75 mS/m</span></div>
+    <div class="gl-row"><span>Irrigation — monitor</span><span class="c-warn">75–300 mS/m</span></div>
+    <div class="gl-row"><span>Irrigation — risk</span><span class="c-alert">&gt; 300 mS/m</span></div>
+    <div class="gl-note">1 mS/m = 10 µS/cm. Risk: soil salinisation, scaling, salty taste.</div>
+  </div>
+
+  <div class="gl-section">
+    <div class="gl-param">pH</div>
+    <div class="gl-row"><span>Drinking water (SANS 241)</span><span>5.0 – 9.7</span></div>
+    <div class="gl-row"><span>Optimal palatability</span><span class="c-good">6.5 – 8.5</span></div>
+    <div class="gl-row"><span>Irrigation (DWS)</span><span class="c-good">6.5 – 8.4</span></div>
+    <div class="gl-note">Low pH corrodes pipes; high pH causes scaling and reduces disinfection effectiveness.</div>
+  </div>
+
+  <div class="gl-section">
+    <div class="gl-param">Nitrate-N (mg/L)</div>
+    <div class="gl-row"><span>Drinking water limit (SANS 241)</span><span class="c-alert">≤ 11.3 mg/L</span></div>
+    <div class="gl-row"><span>Eutrophication concern</span><span class="c-warn">&gt; 1 mg/L</span></div>
+    <div class="gl-row"><span>Irrigation — ideal</span><span class="c-good">&lt; 5 mg/L</span></div>
+    <div class="gl-row"><span>Irrigation — monitor</span><span class="c-warn">5–30 mg/L</span></div>
+    <div class="gl-row"><span>Irrigation — risk</span><span class="c-alert">&gt; 30 mg/L</span></div>
+    <div class="gl-note">Exceeding 11.3 mg/L causes acute health risk; blue baby syndrome in infants.</div>
+  </div>
+
+  <div class="gl-section">
+    <div class="gl-param">Phosphate-P (mg/L)</div>
+    <div class="gl-row"><span>Drinking water limit (SANS 241)</span><span class="c-alert">≤ 1.0 mg/L</span></div>
+    <div class="gl-row"><span>Eutrophication threshold</span><span class="c-warn">&gt; 0.024 mg/L</span></div>
+    <div class="gl-row"><span>Irrigation limit (DWS)</span><span>≤ 2.0 mg/L</span></div>
+    <div class="gl-note">Excess phosphate promotes algal blooms and biofilm growth.</div>
+  </div>
+
+  <div class="gl-section">
+    <div class="gl-param">E. coli (CFU/ml)</div>
+    <div class="gl-row"><span>Drinking water (SANS 241)</span><span class="c-alert">Not detected</span></div>
+    <div class="gl-row"><span>Irrigation limit (DWS)</span><span class="c-warn">&lt; 1 000 CFU/100 mL</span></div>
+    <div class="gl-note">Any E. coli in drinking water indicates faecal contamination. Requires immediate action.</div>
+  </div>
+
+  <div class="gl-section">
+    <div class="gl-param">Water Temperature (°C)</div>
+    <div class="gl-note">No fixed limit. Temperature affects aquatic ecosystems, dissolved oxygen, and chemical reactions. Regular monitoring supports climate change impact assessment.</div>
+  </div>
+</div>
+
 <script>
 // ============================================================
 //  PASTE YOUR GOOGLE SHEET CSV URL HERE
-//  (run getPublicCsvUrl() in Apps Script to get it)
 // ============================================================
 const SHEET_ID = "1rJBZZJD0kuyYCqZQoRJW_gatO3pT_XWbJLwBWFxncm0";
 const GID      = "72389460";
@@ -199,14 +461,11 @@ const map = L.map("map").setView([-29, 25], 6);
 const streetLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap", maxZoom: 19
 }).addTo(map);
-L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+const satelliteLayer = L.tileLayer(
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
   { attribution: "© Esri", maxZoom: 19 }
 );
-L.control.layers({
-  "Street map": streetLayer,
-  "Satellite": L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    { attribution: "© Esri", maxZoom: 19 })
-}).addTo(map);
+L.control.layers({ "Street map": streetLayer, "Satellite": satelliteLayer }).addTo(map);
 
 const clusterGroup = L.markerClusterGroup({ maxClusterRadius: 35, showCoverageOnHover: false });
 map.addLayer(clusterGroup);
@@ -214,62 +473,76 @@ map.addLayer(clusterGroup);
 let allRows    = [];
 let activeParam = "ec";
 
-// ── EC colour scale (mS/m) ──
-// SANS 241 drinking water: EC < 70 good, 70-150 acceptable, >150 poor
+// ── Colour scales — exact colours from Power BI report ──
+
+// EC mS/m: #99c9ef (low/good) → #b93333 (high risk). SANS 241 limit: 170
 const EC_SCALE = [
-  { max: 25,   color: "#1a9850", label: "< 25 (Excellent)" },
-  { max: 70,   color: "#91cf60", label: "25–70 (Good)" },
-  { max: 150,  color: "#fee08b", label: "70–150 (Acceptable)" },
-  { max: 400,  color: "#fc8d59", label: "150–400 (Poor)" },
-  { max: 99999,color: "#d73027", label: "> 400 (Very Poor)" },
+  { max: 170,  color: "#99c9ef", label: "≤ 170 mS/m (SANS 241 limit)" },
+  { max: 350,  color: "#efb199", label: "170–350 mS/m (Poor)" },
+  { max: 99999,color: "#b93333", label: "> 350 mS/m (Very Poor)" },
 ];
 
+// pH: #C3E216 (<5 acidic) · #107C10 (5–9.7 acceptable) · #A80000 (>9.7 exceeds SANS 241)
 const PH_SCALE = [
-  { max: 5,    color: "#d73027", label: "< 5 (Acidic)" },
-  { max: 6.5,  color: "#fc8d59", label: "5–6.5 (Slightly Acidic)" },
-  { max: 8.5,  color: "#1a9850", label: "6.5–8.5 (Optimal)" },
-  { max: 9.5,  color: "#fc8d59", label: "8.5–9.5 (Slightly Alkaline)" },
-  { max: 99,   color: "#d73027", label: "> 9.5 (Alkaline)" },
+  { max: 5,    color: "#C3E216", label: "< 5 (Acidic — corrosive)" },
+  { max: 9.7,  color: "#107C10", label: "5–9.7 (SANS 241 range)" },
+  { max: 99,   color: "#A80000", label: "> 9.7 (Exceeds SANS 241)" },
 ];
 
+// Temperature °C: #66aee7 (cool) → #D83B01 (hot), interpolated at key steps
 const TEMP_SCALE = [
-  { max: 10,   color: "#4575b4", label: "< 10°C (Cold)" },
-  { max: 20,   color: "#74add1", label: "10–20°C" },
-  { max: 25,   color: "#1a9850", label: "20–25°C (Optimal)" },
-  { max: 30,   color: "#fee08b", label: "25–30°C (Warm)" },
-  { max: 99,   color: "#d73027", label: "> 30°C (Hot)" },
+  { max: 13,   color: "#66aee7", label: "< 13°C (Cold)" },
+  { max: 18,   color: "#3393df", label: "13–18°C (Cool)" },
+  { max: 25,   color: "#99c9ef", label: "18–25°C (Optimal)" },
+  { max: 99,   color: "#D83B01", label: "> 25°C (Warm–Hot)" },
 ];
 
+// Nitrate-N mg/L: #005aa1 (<1) · #e06234 (1–10) · #A80000 (>10)
 const NITRATE_SCALE = [
-  { max: 1,    color: "#1a9850", label: "< 1 mg/L" },
-  { max: 5,    color: "#91cf60", label: "1–5 mg/L" },
-  { max: 11,   color: "#fee08b", label: "5–11 mg/L (SANS limit)" },
-  { max: 20,   color: "#fc8d59", label: "11–20 mg/L" },
-  { max: 9999, color: "#d73027", label: "> 20 mg/L" },
+  { max: 1,    color: "#005aa1", label: "< 1 mg/L (Ideal)" },
+  { max: 10,   color: "#e06234", label: "1–10 mg/L (Monitor)" },
+  { max: 9999, color: "#A80000", label: "> 10 mg/L (Exceeds SANS 241)" },
 ];
 
+// Phosphate-P mg/L: #005aa1 (<0.025) · #efb199 (0.025–0.1) · #FD625E (0.1–1) · #A80000 (>1)
 const PHOSPHATE_SCALE = [
-  { max: 0.05, color: "#1a9850", label: "< 0.05 mg/L" },
-  { max: 0.2,  color: "#91cf60", label: "0.05–0.2 mg/L" },
-  { max: 1,    color: "#fee08b", label: "0.2–1 mg/L" },
-  { max: 5,    color: "#fc8d59", label: "1–5 mg/L" },
-  { max: 9999, color: "#d73027", label: "> 5 mg/L" },
+  { max: 0.025,color: "#005aa1", label: "< 0.025 mg/L (Ideal)" },
+  { max: 0.1,  color: "#efb199", label: "0.025–0.1 mg/L" },
+  { max: 1,    color: "#FD625E", label: "0.1–1 mg/L (SANS 241 limit)" },
+  { max: 9999, color: "#A80000", label: "> 1 mg/L (High risk)" },
+];
+
+// E. coli CFU/100mL: #3393df (0 — not detected) · #A80000 (> 0 — any detection)
+const ECOLI_SCALE = [
+  { max: 0,    color: "#3393df", label: "Not detected (SANS 241 ✓)" },
+  { max: 9e9,  color: "#A80000", label: "> 0 CFU/100 mL (Detected)" },
 ];
 
 const SOURCE_COLORS = {
-  "River or Stream":       "#2980b9",
-  "Surface water":         "#2980b9",
-  "Borehole":              "#8e44ad",
-  "Groundwater":           "#8e44ad",
-  "Groundwater spring":    "#9b59b6",
-  "Dam":                   "#1abc9c",
+  "River or Stream":              "#3393df",
+  "Surface water":                "#66aee7",
+  "Borehole":                     "#b44fd6",
+  "Groundwater":                  "#8e44ad",
+  "Groundwater spring":           "#d49cec",
+  "Dam":                          "#1abc9c",
   "Irrigation Canal or Farm Dam": "#16a085",
-  "Natural Lake":          "#27ae60",
-  "Estuary":               "#d4ac0d",
-  "Marine":                "#2c3e50",
-  "Drinking Water":        "#e74c3c",
-  "Water Tank":            "#e67e22",
-  "Other":                 "#95a5a6",
+  "Natural Lake":                 "#27ae60",
+  "Estuary":                      "#e9c46a",
+  "Marine":                       "#023e6e",
+  "Drinking Water":               "#e74c3c",
+  "Water Tank":                   "#e67e22",
+  "Other":                        "#95a5a6",
+};
+
+// Threshold annotations for legend
+const THRESHOLDS = {
+  ec:        "SANS 241: ≤ 170 mS/m · DWS irrig: < 75 ideal",
+  ph:        "SANS 241: 5.0–9.7 · Optimal: 6.5–8.5",
+  temp:      "No fixed limit — ecosystem monitoring",
+  nitrate:   "SANS 241: ≤ 11.3 mg/L · Eutroph: > 1 mg/L",
+  phosphate: "SANS 241: ≤ 1.0 mg/L · Eutroph: > 0.024 mg/L",
+  ecoli:     "SANS 241: not detected · Irrig: < 1 000 CFU/100 mL",
+  source:    "",
 };
 
 function getScaleColor(value, scale) {
@@ -288,6 +561,7 @@ function getColor(row) {
     case "temp":       return getScaleColor(row[C.temp],       TEMP_SCALE);
     case "nitrate":    return getScaleColor(row[C.nitrate],    NITRATE_SCALE);
     case "phosphate":  return getScaleColor(row[C.phosphate],  PHOSPHATE_SCALE);
+    case "ecoli":      return getScaleColor(row[C.ecoli],      ECOLI_SCALE);
     case "source":     return SOURCE_COLORS[row[C.source]] || "#7f8c8d";
     default:           return "#2e86c1";
   }
@@ -300,6 +574,7 @@ function getScale() {
     case "temp":       return TEMP_SCALE;
     case "nitrate":    return NITRATE_SCALE;
     case "phosphate":  return PHOSPHATE_SCALE;
+    case "ecoli":      return ECOLI_SCALE;
     case "source":     return Object.entries(SOURCE_COLORS).map(function(e){
                          return { label: e[0], color: e[1] }; });
     default:           return [];
@@ -319,9 +594,12 @@ function updateLegend() {
   var d = document.getElementById("legend-box");
   if (!d) return;
   var labels = { ec:"EC (mS/m)", ph:"pH", temp:"Temp (°C)",
-                 nitrate:"Nitrate-N (mg/L)", phosphate:"Phosphate-P (mg/L)", source:"Water Source" };
+                 nitrate:"Nitrate-N (mg/L)", phosphate:"Phosphate-P (mg/L)",
+                 ecoli:"E. coli (CFU/ml)", source:"Water Source" };
   var scale = getScale();
+  var threshold = THRESHOLDS[activeParam] || "";
   var html = "<div class='legend-title'>" + labels[activeParam] + "</div>";
+  if (threshold) html += "<div class='legend-threshold'>" + threshold + "</div>";
   scale.forEach(function(s) {
     html += "<div class='legend-item'><div class='legend-dot' style='background:" + s.color + "'></div>"
           + "<span>" + s.label + "</span></div>";
@@ -334,7 +612,7 @@ function driveThumb(url) {
   if (!url) return "";
   var m = url.match(/\/file\/d\/([^\/]+)\//);
   if (!m) return "";
-  return "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w600";
+  return "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w800";
 }
 
 // ── Load data ──
@@ -383,7 +661,7 @@ function render() {
     });
 
     var m = L.marker([lat, lon], { icon: icon });
-    m.bindPopup(makePopup(r, driveThumb(rawPhoto), rawPhoto), { maxWidth: 290 });
+    m.bindPopup(makePopup(r, driveThumb(rawPhoto), rawPhoto), { maxWidth: 370 });
     clusterGroup.addLayer(m);
 
     total++;
@@ -399,6 +677,23 @@ function render() {
   updateLegend();
 }
 
+// ── Value classification for colour hints in popup ──
+// Good = blues (#005aa1, #99c9ef, #3393df, #66aee7, #107C10, #C3E216)
+// Warn = peach/orange (#efb199, #FD625E, #e06234)
+// Alert = dark red (#A80000, #b93333, #D83B01)
+function classify(value, scale) {
+  var v = parseFloat(value);
+  if (isNaN(v)) return "";
+  var color = getScaleColor(v, scale);
+  var good  = ["#005aa1","#99c9ef","#3393df","#66aee7","#107C10","#C3E216"];
+  var warn  = ["#efb199","#FD625E","#e06234"];
+  var alert = ["#A80000","#b93333","#D83B01"];
+  if (good.indexOf(color)  > -1) return "good";
+  if (warn.indexOf(color)  > -1) return "warn";
+  if (alert.indexOf(color) > -1) return "alert";
+  return "";
+}
+
 function makePopup(r, photoThumb, rawPhoto) {
   var site      = r[C.site]      || "Unnamed Site";
   var date      = r[C.date]      || "";
@@ -406,7 +701,8 @@ function makePopup(r, photoThumb, rawPhoto) {
   var collector = r[C.collector] || "Unknown";
   var source    = r[C.source]    || "";
   var ec        = r[C.ec]        || "";
-  var ecDisp    = r[C.ecDisplay] || ec;
+  var ecRaw     = r[C.ecDisplay] || ec;
+  var ecDisp    = ecRaw ? (String(ecRaw).includes("mS/m") ? ecRaw : ecRaw + " mS/m") : "";
   var temp      = r[C.temp]      || "";
   var ph        = r[C.ph]        || "";
   var nitrate   = r[C.nitrate]   || "";
@@ -417,28 +713,98 @@ function makePopup(r, photoThumb, rawPhoto) {
   var dateStr = date ? date.slice(0,10) : "--";
   var timeStr = time ? time.slice(0,5) : "";
 
+  // Photo: clickable to open lightbox
   var photoHtml = photoThumb
-    ? "<img class='pp-photo' src='" + photoThumb + "' alt='Site photo' onerror=\"this.style.display='none'\">"
-    : "<div class='pp-placeholder'>&#x1F4A7;</div>";
+    ? "<img class='pp-photo' src='" + photoThumb + "' alt='Site photo' "
+      + "onclick=\"openPhoto('" + photoThumb.replace(/'/g,"\\'") + "','" + esc(site) + "')\" "
+      + "onerror=\"this.style.display='none'\">"
+    : "<div class='pp-placeholder'>💧</div>";
 
   var driveLink = rawPhoto
-    ? "<a class='pp-drive' href='" + rawPhoto + "' target='_blank'>&#x1F4F7; View full photo &rarr;</a>" : "";
+    ? "<a class='pp-drive' href='" + rawPhoto + "' target='_blank'>📷 View full photo &rarr;</a>" : "";
 
   var notesHtml = notes
     ? "<div class='pp-notes'>" + esc(notes) + "</div>" : "";
 
-  function paramCell(label, val, unit) {
+  function paramCell(label, val, unit, scale) {
     if (!val || val === "NaN" || val === "NAN") return "";
+    var cls = scale ? classify(val, scale) : "";
     return "<div class='pp-param'><span class='pp-param-label'>" + label + "</span>"
-         + "<span class='pp-param-val'>" + val + (unit ? " " + unit : "") + "</span></div>";
+         + "<span class='pp-param-val" + (cls ? " " + cls : "") + "'>"
+         + esc(String(val)) + (unit ? "&nbsp;" + unit : "") + "</span></div>";
   }
 
-  var params = paramCell("EC", ecDisp, "") +
-               paramCell("Temp", temp, "°C") +
-               paramCell("pH", ph, "") +
-               paramCell("Nitrate-N", nitrate, "mg/L") +
-               paramCell("Phosphate-P", phosphate, "mg/L") +
-               paramCell("E.coli", ecoli, "cfu/100ml");
+  var params =
+    paramCell("EC", ecDisp, "", null) +
+    paramCell("Temp", temp, "°C", TEMP_SCALE) +
+    paramCell("pH", ph, "", PH_SCALE) +
+    paramCell("Nitrate-N", nitrate, "mg/L", NITRATE_SCALE) +
+    paramCell("Phosphate-P", phosphate, "mg/L", PHOSPHATE_SCALE) +
+    paramCell("E. coli", ecoli, "CFU/ml", ECOLI_SCALE);
+
+  // ── Threshold commentary ──
+  var flags = [];  // { cls, text }
+
+  var ecNum = parseFloat(ec);
+  if (!isNaN(ecNum)) {
+    if (ecNum > 350)      flags.push({ cls:"alert", text:"EC greatly exceeds the SANS 241 drinking water limit (170 mS/m) and poses a soil salinity risk for irrigation." });
+    else if (ecNum > 170) flags.push({ cls:"warn",  text:"EC exceeds the SANS 241 drinking water limit of 170 mS/m — monitor for irrigation use." });
+    else if (ecNum > 75)  flags.push({ cls:"warn",  text:"EC is within the SANS 241 drinking limit but above the ideal irrigation threshold (75 mS/m) — monitor salt-sensitive crops." });
+    else                  flags.push({ cls:"good",  text:"EC is within the ideal range for both drinking and irrigation use." });
+  }
+
+  var phNum = parseFloat(ph);
+  if (!isNaN(phNum)) {
+    if (phNum > 9.7)       flags.push({ cls:"alert", text:"pH exceeds the SANS 241 upper limit of 9.7 — may cause pipe scaling and reduce disinfection effectiveness." });
+    else if (phNum < 5)    flags.push({ cls:"alert", text:"pH is below 5 — highly acidic water that can corrode pipes and leach heavy metals." });
+    else if (phNum > 8.5)  flags.push({ cls:"warn",  text:"pH is slightly alkaline (above 8.5) — may reduce irrigation efficiency and cause nutrient lock-up in soil." });
+    else if (phNum < 6.5)  flags.push({ cls:"warn",  text:"pH is slightly acidic (below 6.5) — may affect soil structure and damage sensitive crops." });
+    else                   flags.push({ cls:"good",  text:"pH is within the optimal range (6.5–8.5) for drinking and irrigation." });
+  }
+
+  var nitrateNum = parseFloat(nitrate);
+  if (!isNaN(nitrateNum)) {
+    if (nitrateNum > 11.3) flags.push({ cls:"alert", text:"Nitrate-N exceeds the SANS 241 drinking water limit of 11.3 mg/L — risk of blue baby syndrome in infants." });
+    else if (nitrateNum > 5) flags.push({ cls:"warn", text:"Nitrate-N is above the ideal irrigation threshold (5 mg/L) — long-term use may lead to soil accumulation." });
+    else if (nitrateNum > 1) flags.push({ cls:"warn", text:"Nitrate-N above 1 mg/L — eutrophication risk in nearby water bodies." });
+    else                   flags.push({ cls:"good",  text:"Nitrate-N is within the ideal range." });
+  }
+
+  var phosphateNum = parseFloat(phosphate);
+  if (!isNaN(phosphateNum)) {
+    if (phosphateNum > 1)     flags.push({ cls:"alert", text:"Phosphate-P exceeds the SANS 241 drinking water limit of 1.0 mg/L." });
+    else if (phosphateNum > 0.1) flags.push({ cls:"warn", text:"Phosphate-P is elevated — may promote algal growth and biofilm in water systems." });
+    else if (phosphateNum > 0.025) flags.push({ cls:"warn", text:"Phosphate-P above the eutrophication threshold (0.025 mg/L) — monitor nearby water bodies." });
+    else                      flags.push({ cls:"good",  text:"Phosphate-P is within the ideal range." });
+  }
+
+  var ecoliNum = parseFloat(ecoli);
+  if (!isNaN(ecoliNum)) {
+    if (ecoliNum > 1000)    flags.push({ cls:"alert", text:"E. coli exceeds the irrigation limit of 1 000 CFU/100 mL — unsafe for crop irrigation." });
+    else if (ecoliNum > 0)  flags.push({ cls:"alert", text:"E. coli detected — any presence indicates faecal contamination. Water is unsafe for drinking without treatment." });
+    else                    flags.push({ cls:"good",  text:"E. coli not detected — meets the SANS 241 drinking water standard." });
+  }
+
+  var hasData = flags.length > 0;
+  var allGood = hasData && flags.every(function(f){ return f.cls === "good"; });
+
+  var commentsHtml = "";
+  if (hasData) {
+    var flagItems = flags.map(function(f) {
+      var icon = f.cls === "good" ? "✓" : f.cls === "warn" ? "⚠" : "✕";
+      return "<div class='pp-comment pp-comment-" + f.cls + "'>"
+           + "<span class='pp-comment-icon'>" + icon + "</span>"
+           + "<span>" + f.text + "</span>"
+           + "</div>";
+    }).join("");
+
+    commentsHtml = "<div class='pp-comments'>"
+      + (allGood
+          ? "<div class='pp-comment-summary good'>All measured parameters within acceptable ranges.</div>"
+          : "")
+      + flagItems
+      + "</div>";
+  }
 
   return photoHtml +
     "<div class='pp-body'>" +
@@ -449,6 +815,7 @@ function makePopup(r, photoThumb, rawPhoto) {
         "<b>Date:</b> " + dateStr + (timeStr ? " at " + timeStr : "") +
       "</div>" +
       (params ? "<div class='pp-params'>" + params + "</div>" : "") +
+      commentsHtml +
       notesHtml +
       driveLink +
     "</div>";
@@ -464,7 +831,33 @@ function toast(msg, show) {
   el.style.display = show ? "block" : "none";
 }
 
-// ── Demo mode with real data from the XLS ──
+// ── Lightbox ──
+function openPhoto(url, site) {
+  var overlay = document.getElementById("photo-overlay");
+  document.getElementById("photo-overlay-img").src = url;
+  document.getElementById("photo-overlay-caption").textContent = site || "";
+  overlay.classList.add("open");
+}
+document.getElementById("photo-overlay-close").addEventListener("click", function() {
+  document.getElementById("photo-overlay").classList.remove("open");
+  document.getElementById("photo-overlay-img").src = "";
+});
+document.getElementById("photo-overlay").addEventListener("click", function(e) {
+  if (e.target === this) {
+    this.classList.remove("open");
+    document.getElementById("photo-overlay-img").src = "";
+  }
+});
+
+// ── Guidelines panel ──
+document.getElementById("info-btn").addEventListener("click", function() {
+  document.getElementById("guidelines-panel").classList.toggle("open");
+});
+document.getElementById("gl-close-btn").addEventListener("click", function() {
+  document.getElementById("guidelines-panel").classList.remove("open");
+});
+
+// ── Demo mode ──
 function showDemo() {
   var notice = L.control({ position: "topleft" });
   notice.onAdd = function() {
@@ -476,24 +869,33 @@ function showDemo() {
   notice.addTo(map);
 
   var demo = [
-    { site:"Groenkloof borehole", lat:-25.773257, lon:28.212563, ec:19, ph:5.5, temp:"", source:"Borehole", notes:"" },
-    { site:"Roodeplaat River",    lat:-25.602004, lon:28.372679, ec:96, ph:6,   temp:11.7, source:"River or Stream", notes:"" },
-    { site:"R555 Bridge",         lat:-25.532606, lon:28.102857, ec:31, ph:6,   temp:20.3, source:"River or Stream", notes:"EC and Nitrate measured" },
-    { site:"Rietvlei 1st bridge", lat:-25.901225, lon:28.314972, ec:61, ph:5.5, temp:13.5, source:"River or Stream", notes:"Water grey, smelt like sewage" },
-    { site:"Jagersfontein mine",  lat:-29.777679, lon:25.435861, ec:605,ph:"",  temp:"",   source:"Surface water",  notes:"Mine water" },
-    { site:"Loskop Dam wall",     lat:-25.417775, lon:29.361328, ec:"", ph:"",  temp:"",   source:"Dam",            notes:"" },
-    { site:"Fish River Canyon",   lat:-27.622525, lon:17.602259, ec:76, ph:5,   temp:17.5, source:"River or Stream", notes:"" },
-    { site:"Swartvlei Estuary",   lat:-34.021256, lon:22.782541, ec:">2000",ph:7,temp:14.6,source:"Estuary",       notes:"Salt water, mouth closed" },
-    { site:"Mossel Bay Ocean",    lat:-34.183800, lon:22.136700, ec:">2000",ph:"",temp:17, source:"Marine",         notes:"EC measure" },
-    { site:"Luvuvhu River",       lat:-22.971172, lon:30.603815, ec:15, ph:6.2, temp:24.1, source:"River or Stream", notes:"" },
+    { site:"Groenkloof borehole", lat:-25.773257, lon:28.212563, ec:19,  ph:5.5, temp:"",   nitrate:"",    phosphate:"",   ecoli:0,    source:"Borehole",        notes:"" },
+    { site:"Roodeplaat River",    lat:-25.602004, lon:28.372679, ec:96,  ph:6,   temp:11.7,  nitrate:2.1,   phosphate:0.08, ecoli:45,   source:"River or Stream", notes:"" },
+    { site:"R555 Bridge",         lat:-25.532606, lon:28.102857, ec:31,  ph:6,   temp:20.3,  nitrate:0.8,   phosphate:0.03, ecoli:0,    source:"River or Stream", notes:"EC and Nitrate measured" },
+    { site:"Rietvlei 1st bridge", lat:-25.901225, lon:28.314972, ec:61,  ph:5.5, temp:13.5,  nitrate:3.2,   phosphate:0.12, ecoli:320,  source:"River or Stream", notes:"Water grey, smelt like sewage" },
+    { site:"Jagersfontein mine",  lat:-29.777679, lon:25.435861, ec:605, ph:"",  temp:"",    nitrate:"",    phosphate:"",   ecoli:"",   source:"Surface water",   notes:"Mine water" },
+    { site:"Loskop Dam wall",     lat:-25.417775, lon:29.361328, ec:"",  ph:"",  temp:"",    nitrate:"",    phosphate:"",   ecoli:"",   source:"Dam",             notes:"" },
+    { site:"Fish River Canyon",   lat:-27.622525, lon:17.602259, ec:76,  ph:5,   temp:17.5,  nitrate:1.1,   phosphate:0.05, ecoli:5,    source:"River or Stream", notes:"" },
+    { site:"Swartvlei Estuary",   lat:-34.021256, lon:22.782541, ec:2100,ph:7,   temp:14.6,  nitrate:"",    phosphate:"",   ecoli:"",   source:"Estuary",         notes:"Salt water, mouth closed" },
+    { site:"Mossel Bay Ocean",    lat:-34.183800, lon:22.136700, ec:2100,ph:"",  temp:17,    nitrate:"",    phosphate:"",   ecoli:"",   source:"Marine",          notes:"" },
+    { site:"Luvuvhu River",       lat:-22.971172, lon:30.603815, ec:15,  ph:6.2, temp:24.1,  nitrate:0.4,   phosphate:0.02, ecoli:12,   source:"River or Stream", notes:"" },
   ];
 
   var fakeRows = demo.map(function(d) {
     var r = new Array(20).fill("");
-    r[C.site] = d.site; r[C.lat] = d.lat; r[C.lon] = d.lon;
-    r[C.ec] = d.ec; r[C.ecDisplay] = d.ec ? d.ec + " mS/m" : "";
-    r[C.ph] = d.ph; r[C.temp] = d.temp; r[C.source] = d.source;
-    r[C.notes] = d.notes; r[C.collector] = "Demo";
+    r[C.site]      = d.site;
+    r[C.lat]       = d.lat;
+    r[C.lon]       = d.lon;
+    r[C.ec]        = d.ec;
+    r[C.ecDisplay] = d.ec ? d.ec + " mS/m" : "";
+    r[C.ph]        = d.ph;
+    r[C.temp]      = d.temp;
+    r[C.nitrate]   = d.nitrate;
+    r[C.phosphate] = d.phosphate;
+    r[C.ecoli]     = d.ecoli;
+    r[C.source]    = d.source;
+    r[C.notes]     = d.notes;
+    r[C.collector] = "Demo";
     return r;
   });
   allRows = fakeRows;
@@ -515,7 +917,354 @@ document.querySelectorAll(".param-btn").forEach(function(btn) {
 });
 document.getElementById("search-input").addEventListener("input", function() { render(); });
 
+// ── Charts Panel ──────────────────────────────────────────────
+const PALETTE = [
+  "#3393df","#e9c46a","#e06234","#1abc9c","#9b59b6",
+  "#f4a261","#2ecc71","#e74c3c","#27ae60","#d4ac0d",
+  "#16a085","#8e44ad","#c0392b","#2980b9","#f39c12",
+];
+
+const CP_PARAMS = [
+  { key:"ec",        label:"EC",             unit:"mS/m",   col:C.ec,
+    color:"#3393df",  hint:"SANS 241: ≤ 170 mS/m",
+    bands:[
+      {from:0,   to:75,    bg:"rgba(16,124,16,0.10)"},
+      {from:75,  to:170,   bg:"rgba(46,134,193,0.10)"},
+      {from:170, to:350,   bg:"rgba(239,177,153,0.18)"},
+      {from:350, to:99999, bg:"rgba(168,0,0,0.14)"},
+    ]},
+  { key:"ph",        label:"pH",             unit:"",       col:C.ph,
+    color:"#C3E216",  hint:"Optimal: 6.5–8.5 · SANS 241: 5–9.7",
+    yMin:0, yMax:14,
+    bands:[
+      {from:0,   to:5,   bg:"rgba(168,0,0,0.14)"},
+      {from:5,   to:6.5, bg:"rgba(239,177,153,0.18)"},
+      {from:6.5, to:8.5, bg:"rgba(16,124,16,0.10)"},
+      {from:8.5, to:9.7, bg:"rgba(239,177,153,0.18)"},
+      {from:9.7, to:14,  bg:"rgba(168,0,0,0.14)"},
+    ]},
+  { key:"temp",      label:"Temperature",    unit:"°C",     col:C.temp,
+    color:"#66aee7",  hint:"Ecosystem monitoring — no fixed limit", bands:[] },
+  { key:"nitrate",   label:"Nitrate-N",      unit:"mg/L",   col:C.nitrate,
+    color:"#9b59b6",  hint:"SANS 241: ≤ 11.3 mg/L",
+    bands:[
+      {from:0,    to:1,    bg:"rgba(16,124,16,0.10)"},
+      {from:1,    to:5,    bg:"rgba(239,177,153,0.12)"},
+      {from:5,    to:11.3, bg:"rgba(239,177,153,0.18)"},
+      {from:11.3, to:99999,bg:"rgba(168,0,0,0.14)"},
+    ]},
+  { key:"phosphate", label:"Phosphate-P",    unit:"mg/L",   col:C.phosphate,
+    color:"#e06234",  hint:"SANS 241: ≤ 1.0 mg/L",
+    bands:[
+      {from:0,     to:0.025, bg:"rgba(16,124,16,0.10)"},
+      {from:0.025, to:0.1,   bg:"rgba(239,177,153,0.12)"},
+      {from:0.1,   to:1,     bg:"rgba(239,177,153,0.18)"},
+      {from:1,     to:99999, bg:"rgba(168,0,0,0.14)"},
+    ]},
+  { key:"ecoli",     label:"E. coli",        unit:"CFU/ml", col:C.ecoli,
+    color:"#A80000",  hint:"SANS 241: not detected · Irrig: < 1 000",
+    bands:[
+      {from:0,    to:1,    bg:"rgba(16,124,16,0.10)"},
+      {from:1,    to:1000, bg:"rgba(168,0,0,0.12)"},
+      {from:1000, to:1e8,  bg:"rgba(168,0,0,0.22)"},
+    ]},
+];
+
+var cpSelectedSites = new Set();
+var cpMultiMode     = false;
+var cpCharts        = {};
+var cpSiteColors    = {};
+var cpShowBands     = true;
+var cpAllSites      = [];
+
+function cpGetSiteColor(site) {
+  if (!cpSiteColors[site]) {
+    var idx = cpAllSites.indexOf(site);
+    cpSiteColors[site] = PALETTE[Math.max(idx,0) % PALETTE.length];
+  }
+  return cpSiteColors[site];
+}
+
+function cpOpen() {
+  // Derive site list from loaded data
+  var siteSet = {};
+  allRows.forEach(function(r){ var s = r[C.site]||""; if(s) siteSet[s]=true; });
+  cpAllSites = Object.keys(siteSet).sort();
+  // Pre-assign colours
+  cpAllSites.forEach(function(s,i){ cpSiteColors[s] = PALETTE[i % PALETTE.length]; });
+
+  document.getElementById("charts-panel").classList.add("open");
+  document.getElementById("chart-btn").classList.add("active");
+  cpBuildSiteChips("");
+  cpBuildCards();
+  cpRender();
+}
+
+function cpClose() {
+  document.getElementById("charts-panel").classList.remove("open");
+  document.getElementById("chart-btn").classList.remove("active");
+}
+
+function cpBuildSiteChips(q) {
+  var container = document.getElementById("cp-site-chips");
+  container.innerHTML = "";
+  cpAllSites.filter(function(s){ return !q || s.toLowerCase().includes(q); })
+    .forEach(function(site) {
+      var chip = document.createElement("div");
+      chip.className = "cp-site-chip" + (cpSelectedSites.has(site) ? " active" : "");
+      chip.style.background = cpSelectedSites.has(site) ? cpSiteColors[site]+"22" : "";
+      chip.style.borderColor = cpSelectedSites.has(site) ? cpSiteColors[site] : "";
+      chip.innerHTML = "<div class='chip-dot' style='background:" + cpSiteColors[site] + "'></div>"
+                     + "<span>" + site + "</span>";
+      chip.addEventListener("click", function() {
+        if (cpSelectedSites.has(site)) {
+          cpSelectedSites.delete(site);
+        } else {
+          if (!cpMultiMode) cpSelectedSites.clear(); // single mode: clear first
+          cpSelectedSites.add(site);
+        }
+        cpBuildSiteChips(document.getElementById("cp-site-search").value.toLowerCase());
+        cpRender();
+      });
+      container.appendChild(chip);
+    });
+}
+
+function cpBuildCards() {
+  var area = document.getElementById("cp-charts");
+  area.innerHTML = "";
+  CP_PARAMS.forEach(function(p) {
+    var card = document.createElement("div");
+    card.className = "cp-card";
+    card.style.setProperty("--cp-color", p.color);
+    card.innerHTML =
+      "<div class='cp-card-header'>"
+      + "<div class='cp-card-title'>" + p.label + "</div>"
+      + "<div class='cp-card-unit'>" + p.unit + "</div>"
+      + "</div>"
+      + (p.hint ? "<div class='cp-card-hint'>" + p.hint + "</div>" : "")
+      + "<div class='cp-card-wrap'><canvas id='cpc-" + p.key + "'></canvas></div>";
+    area.appendChild(card);
+  });
+}
+
+function cpRender() {
+  // Update legend strip
+  var legend = document.getElementById("cp-legend");
+  if (cpSelectedSites.size === 0) {
+    legend.innerHTML = "<span>Select a site to display charts</span>";
+  } else {
+    legend.innerHTML = "";
+    cpSelectedSites.forEach(function(site) {
+      var chip = document.createElement("div");
+      chip.className = "cp-legend-chip";
+      chip.innerHTML = "<div class='cp-legend-dot' style='background:" + cpSiteColors[site] + "'></div><span>" + site + "</span>";
+      legend.appendChild(chip);
+    });
+  }
+
+  var dateFrom = document.getElementById("cp-from").value;
+  var dateTo   = document.getElementById("cp-to").value;
+
+  CP_PARAMS.forEach(function(p) {
+    var canvas = document.getElementById("cpc-" + p.key);
+    if (!canvas) return;
+
+    // Filter rows to selected sites + date range, with a numeric value
+    var filtered = allRows.filter(function(r) {
+      var site = r[C.site] || "";
+      if (cpSelectedSites.size > 0 && !cpSelectedSites.has(site)) return false;
+      var d = (r[C.date]||"").slice(0,10);
+      if (dateFrom && d < dateFrom) return false;
+      if (dateTo   && d > dateTo)   return false;
+      return !isNaN(parseFloat(r[p.col]));
+    });
+
+    // Group by site, sort by date
+    var bySite = {};
+    filtered.forEach(function(r) {
+      var site = r[C.site] || "?";
+      if (!bySite[site]) bySite[site] = [];
+      bySite[site].push({ x:(r[C.date]||"").slice(0,10), y:parseFloat(r[p.col]) });
+    });
+    Object.keys(bySite).forEach(function(s){
+      bySite[s].sort(function(a,b){ return a.x < b.x ? -1 : 1; });
+    });
+
+    // Destroy old
+    if (cpCharts[p.key]) { cpCharts[p.key].destroy(); delete cpCharts[p.key]; }
+
+    var siteKeys = Object.keys(bySite);
+
+    // Restore canvas if replaced by no-data div
+    var wrap = canvas.parentElement;
+    if (!wrap.querySelector("canvas")) {
+      var nc = document.createElement("canvas");
+      nc.id = "cpc-" + p.key;
+      wrap.innerHTML = "";
+      wrap.appendChild(nc);
+      canvas = nc;
+    }
+
+    if (siteKeys.length === 0) {
+      wrap.innerHTML = "<div class='cp-no-data'>" + (cpSelectedSites.size === 0 ? "Select a site →" : "No data for this parameter") + "</div>";
+      return;
+    }
+
+    // Collect all x labels across sites
+    var allX = [];
+    siteKeys.forEach(function(s){ bySite[s].forEach(function(pt){ allX.push(pt.x); }); });
+    allX = Array.from(new Set(allX)).sort();
+
+    // Max y for band capping
+    var maxY = 0;
+    siteKeys.forEach(function(s){ bySite[s].forEach(function(pt){ if(pt.y>maxY) maxY=pt.y; }); });
+    if (p.bands) p.bands.forEach(function(b){ if(b.to<10000&&b.to>maxY) maxY=b.to; });
+    if (maxY === 0) maxY = 1;
+
+    // Band datasets
+    var bandDs = [];
+    if (cpShowBands && p.bands && p.bands.length && allX.length) {
+      p.bands.forEach(function(band) {
+        var capTo = band.to > 10000 ? maxY * 1.15 : band.to;
+        bandDs.push({
+          label:"_b", data: allX.map(function(x){ return {x:x, y:band.from}; }),
+          borderColor:"transparent", backgroundColor: band.bg,
+          pointRadius:0, borderWidth:0, fill:"+1", tension:0,
+        });
+        bandDs.push({
+          label:"_bt", data: allX.map(function(x){ return {x:x, y:capTo}; }),
+          borderColor:"transparent", backgroundColor:"transparent",
+          pointRadius:0, borderWidth:0, fill:false, tension:0,
+        });
+      });
+    }
+
+    // Site datasets
+    var siteDs = siteKeys.map(function(site) {
+      var col = cpSiteColors[site] || "#7f8c8d";
+      return {
+        label: site,
+        data: bySite[site],
+        borderColor: col,
+        backgroundColor: col + "18",
+        pointBackgroundColor: col,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+        tension: 0.35,
+        fill: false,
+      };
+    });
+
+    cpCharts[p.key] = new Chart(canvas, {
+      type: "line",
+      data: { datasets: bandDs.concat(siteDs) },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 350 },
+        parsing: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            filter: function(i){ return !i.dataset.label.startsWith("_"); },
+            backgroundColor: "#081320",
+            borderColor: "rgba(46,134,193,0.35)", borderWidth: 1,
+            titleColor: "#aed6f1", bodyColor: "#f0f6fc",
+            titleFont: { family:"DM Sans", size:11 },
+            bodyFont:  { family:"DM Sans", size:11 },
+            padding: 9,
+            callbacks: {
+              title: function(items){ return items[0].dataset.label; },
+              label: function(item){
+                return item.parsed.x + ":  " + item.parsed.y.toFixed(2) + (p.unit ? " " + p.unit : "");
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: "category",
+            ticks: { color:"rgba(240,246,252,0.4)", font:{size:9}, maxRotation:40, autoSkip:true, maxTicksLimit:7 },
+            grid: { color:"rgba(46,134,193,0.07)" },
+            border: { color:"rgba(46,134,193,0.12)" },
+          },
+          y: {
+            min: p.yMin !== undefined ? p.yMin : 0,
+            max: p.yMax !== undefined ? p.yMax : maxY * 1.15,
+            ticks: { color:"rgba(240,246,252,0.4)", font:{size:9}, maxTicksLimit:5 },
+            grid: { color:"rgba(46,134,193,0.07)" },
+            border: { color:"rgba(46,134,193,0.12)" },
+          }
+        }
+      }
+    });
+  });
+}
+
+// Wire up charts panel controls
+document.getElementById("chart-btn").addEventListener("click", function() {
+  var panel = document.getElementById("charts-panel");
+  if (panel.classList.contains("open")) cpClose(); else cpOpen();
+});
+document.getElementById("cp-close-btn").addEventListener("click", cpClose);
+document.getElementById("cp-from").addEventListener("change", cpRender);
+document.getElementById("cp-to").addEventListener("change", cpRender);
+document.getElementById("cp-bands").addEventListener("change", function(){ cpShowBands = this.checked; cpRender(); });
+document.getElementById("cp-site-search").addEventListener("input", function(){
+  cpBuildSiteChips(this.value.toLowerCase());
+});
+document.getElementById("cp-mode-single").addEventListener("click", function(){
+  cpMultiMode = false;
+  this.classList.add("active");
+  document.getElementById("cp-mode-multi").classList.remove("active");
+  // Keep only the most recent selection
+  if (cpSelectedSites.size > 1) {
+    var last = Array.from(cpSelectedSites).pop();
+    cpSelectedSites.clear();
+    cpSelectedSites.add(last);
+    cpBuildSiteChips(document.getElementById("cp-site-search").value.toLowerCase());
+    cpRender();
+  }
+});
+document.getElementById("cp-mode-multi").addEventListener("click", function(){
+  cpMultiMode = true;
+  this.classList.add("active");
+  document.getElementById("cp-mode-single").classList.remove("active");
+});
+
+Chart.defaults.color = "rgba(240,246,252,0.45)";
+
 load();
 </script>
+<!-- ── Charts slide-out panel ── -->
+<div id="charts-panel">
+  <div id="charts-panel-header">
+    <div class="cp-title">📈 Site Charts</div>
+    <button class="cp-close" id="cp-close-btn">✕</button>
+  </div>
+
+  <div id="cp-site-bar">
+    <label>Sites:</label>
+    <input type="text" id="cp-site-search" placeholder="Filter…"/>
+    <div id="cp-site-chips" style="display:flex;gap:0.4rem;flex-wrap:wrap;flex:1;"></div>
+    <button class="cp-mode-btn active" id="cp-mode-single" title="Single site">Single</button>
+    <button class="cp-mode-btn" id="cp-mode-multi" title="Compare multiple sites">Multi</button>
+  </div>
+
+  <div id="cp-date-bar">
+    <span>From</span>
+    <input type="date" id="cp-from"/>
+    <span>To</span>
+    <input type="date" id="cp-to"/>
+    <label class="cp-bands-toggle">
+      <input type="checkbox" id="cp-bands" checked/> Threshold bands
+    </label>
+  </div>
+
+  <div id="cp-legend"><span>Select a site to display charts</span></div>
+  <div id="cp-charts"></div>
+</div>
+
 </body>
 </html>
