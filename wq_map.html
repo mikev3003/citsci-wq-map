@@ -425,6 +425,35 @@
   </div>
 </div>
 
+<!-- ── Charts slide-out panel ── -->
+<div id="charts-panel">
+  <div id="charts-panel-header">
+    <div class="cp-title">📈 Site Charts</div>
+    <button class="cp-close" id="cp-close-btn">✕</button>
+  </div>
+
+  <div id="cp-site-bar">
+    <label>Sites:</label>
+    <input type="text" id="cp-site-search" placeholder="Filter…"/>
+    <div id="cp-site-chips" style="display:flex;gap:0.4rem;flex-wrap:wrap;flex:1;"></div>
+    <button class="cp-mode-btn active" id="cp-mode-single" title="Single site">Single</button>
+    <button class="cp-mode-btn" id="cp-mode-multi" title="Compare multiple sites">Multi</button>
+  </div>
+
+  <div id="cp-date-bar">
+    <span>From</span>
+    <input type="date" id="cp-from"/>
+    <span>To</span>
+    <input type="date" id="cp-to"/>
+    <label class="cp-bands-toggle">
+      <input type="checkbox" id="cp-bands" checked/> Threshold bands
+    </label>
+  </div>
+
+  <div id="cp-legend"><span>Select a site to display charts</span></div>
+  <div id="cp-charts"></div>
+</div>
+
 <script>
 // ============================================================
 //  PASTE YOUR GOOGLE SHEET CSV URL HERE
@@ -1237,34 +1266,6 @@ Chart.defaults.color = "rgba(240,246,252,0.45)";
 
 load();
 </script>
-<!-- ── Charts slide-out panel ── -->
-<div id="charts-panel">
-  <div id="charts-panel-header">
-    <div class="cp-title">📈 Site Charts</div>
-    <button class="cp-close" id="cp-close-btn">✕</button>
-  </div>
-
-  <div id="cp-site-bar">
-    <label>Sites:</label>
-    <input type="text" id="cp-site-search" placeholder="Filter…"/>
-    <div id="cp-site-chips" style="display:flex;gap:0.4rem;flex-wrap:wrap;flex:1;"></div>
-    <button class="cp-mode-btn active" id="cp-mode-single" title="Single site">Single</button>
-    <button class="cp-mode-btn" id="cp-mode-multi" title="Compare multiple sites">Multi</button>
-  </div>
-
-  <div id="cp-date-bar">
-    <span>From</span>
-    <input type="date" id="cp-from"/>
-    <span>To</span>
-    <input type="date" id="cp-to"/>
-    <label class="cp-bands-toggle">
-      <input type="checkbox" id="cp-bands" checked/> Threshold bands
-    </label>
-  </div>
-
-  <div id="cp-legend"><span>Select a site to display charts</span></div>
-  <div id="cp-charts"></div>
-</div>
 
 </body>
 </html>
