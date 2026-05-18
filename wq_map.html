@@ -351,7 +351,6 @@
   <button class="param-btn" data-param="nitrate">Nitrate-N</button>
   <button class="param-btn" data-param="phosphate">Phosphate-P</button>
   <button class="param-btn" data-param="ecoli">E. coli</button>
-  <button class="param-btn" data-param="source">Water Source</button>
   <div class="sep"></div>
   <input type="text" id="search-input" placeholder="Search site..."/>
   <button id="info-btn">ℹ Guidelines</button>
@@ -853,8 +852,27 @@ function makePopup(r, photoThumb, rawPhoto) {
       (params ? "<div class='pp-params'>" + params + "</div>" : "") +
       commentsHtml +
       notesHtml +
-      driveLink +
+      "<div style='display:flex;gap:0.5rem;align-items:center;margin-top:0.55rem;flex-wrap:wrap;'>" +
+        "<button onclick=\"openChartForSite('" + esc(site).replace(/'/g,"\\'") + "')\" " +
+          "style='background:rgba(46,134,193,0.15);border:1px solid rgba(46,134,193,0.4);color:#aed6f1;" +
+          "border-radius:14px;padding:0.22rem 0.7rem;font-size:0.68rem;cursor:pointer;font-family:DM Sans,sans-serif;'>"+
+          "📈 View charts for this site</button>" +
+        driveLink +
+      "</div>" +
     "</div>";
+}
+
+function openChartForSite(site) {
+  map.closePopup();
+  // Open the charts panel, pre-selecting the site
+  if (!document.getElementById("charts-panel").classList.contains("open")) {
+    cpOpen();
+  }
+  // Add site to selection (respecting current mode)
+  if (!cpMultiMode) cpSelectedSites.clear();
+  cpSelectedSites.add(site);
+  cpRenderTags();
+  cpRender();
 }
 
 function esc(s) {
@@ -1212,7 +1230,7 @@ function cpRender() {
               }
             }
           },
-          annotation: annotations,
+          annotation: { annotations: annotations },
         },
         scales: {
           x: {
