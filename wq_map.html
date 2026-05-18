@@ -353,7 +353,7 @@
   <button class="param-btn" data-param="ecoli">E. coli</button>
   <button class="param-btn" data-param="source">Water Source</button>
   <div class="sep"></div>
-  <input type="text" id="search-input" placeholder="Search site or collector..."/>
+  <input type="text" id="search-input" placeholder="Search site..."/>
   <button id="info-btn">ℹ Guidelines</button>
   <button id="chart-btn">📈 Charts</button>
 </div>
@@ -954,9 +954,9 @@ document.getElementById("search-input").addEventListener("input", function() { r
 
 // ── Charts Panel ──────────────────────────────────────────────
 const PALETTE = [
-  "#3393df","#e9c46a","#e06234","#1abc9c","#9b59b6",
-  "#f4a261","#2ecc71","#e74c3c","#27ae60","#d4ac0d",
-  "#16a085","#8e44ad","#c0392b","#2980b9","#f39c12",
+  "#3393df","#e9c46a","#e06234","#1abc9c","#c0392b",
+  "#f4a261","#2ecc71","#8e44ad","#27ae60","#d4ac0d",
+  "#16a085","#2980b9","#e74c3c","#f39c12","#1a5276",
 ];
 
 const CP_PARAMS = [
@@ -1162,9 +1162,9 @@ function cpRender() {
       return {
         label: site,
         data: allX.map(function(x){ return dataByX[x] !== undefined ? parseFloat(dataByX[x].toFixed(3)) : null; }),
-        backgroundColor: col + "cc",
+        backgroundColor: col + "dd",
         borderColor: col,
-        borderWidth: 1,
+        borderWidth: 1.5,
         borderRadius: 3,
         skipNull: true,
       };
@@ -1272,6 +1272,9 @@ document.getElementById("cp-mode-multi").addEventListener("click", function(){
 });
 
 Chart.defaults.color = "rgba(240,246,252,0.45)";
+// Register annotation plugin (cdnjs build exposes it as window['chartjs-plugin-annotation'])
+var _annotationPlugin = window['chartjs-plugin-annotation'];
+if (_annotationPlugin) Chart.register(_annotationPlugin);
 
 load();
 </script>
