@@ -187,7 +187,7 @@
   .gl-title { font-family:"Playfair Display",serif; font-size:1rem;
               color:var(--blue-pale); margin-bottom:1rem; }
   .gl-section { margin-bottom:1.1rem; }
-  .gl-param { font-size:0.75rem; font-weight:600; text-transform:uppercase;
+  .gl-param { font-size:0.75rem; font-weight:600;
               letter-spacing:0.09em; color:var(--blue-pale); border-bottom:1px solid rgba(46,134,193,0.2);
               padding-bottom:0.3rem; margin-bottom:0.5rem; }
   .gl-row { display:flex; justify-content:space-between; align-items:baseline;
@@ -239,23 +239,6 @@
   }
   #cp-site-bar label { font-size:0.63rem; letter-spacing:0.1em; text-transform:uppercase;
                         color:var(--blue-pale); white-space:nowrap; }
-  .cp-site-chip {
-    display:flex; align-items:center; gap:0.3rem;
-    background: rgba(255,255,255,0.05); border: 1px solid rgba(46,134,193,0.25);
-    border-radius: 14px; padding: 0.18rem 0.6rem 0.18rem 0.45rem;
-    font-size: 0.72rem; color: rgba(244,249,253,0.6); cursor: pointer;
-    transition: all 0.15s; user-select:none;
-  }
-  .cp-site-chip:hover { border-color: var(--blue-light); color: var(--cream); }
-  .cp-site-chip.active { color: var(--cream); border-color: transparent; }
-  .cp-site-chip .chip-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; opacity:0.3; }
-  .cp-site-chip.active .chip-dot { opacity:1; }
-  #cp-site-search {
-    background: rgba(255,255,255,0.06); border: 1px solid rgba(46,134,193,0.25);
-    color: var(--cream); border-radius: 6px; padding: 0.2rem 0.5rem;
-    font-family: "DM Sans", sans-serif; font-size: 0.72rem; outline: none; width: 130px;
-  }
-  #cp-site-search::placeholder { color: rgba(244,249,253,0.25); }
   .cp-mode-btn {
     background: rgba(255,255,255,0.05); border: 1px solid rgba(46,134,193,0.25);
     color: rgba(244,249,253,0.5); border-radius: 14px; padding: 0.18rem 0.6rem;
@@ -318,6 +301,21 @@
   .cp-no-data { display:flex; align-items:center; justify-content:center;
                 height:155px; font-size:0.72rem; color:rgba(244,249,253,0.25); font-style:italic; }
 
+  #cp-site-bar select {
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(46,134,193,0.3);
+    color: var(--cream); border-radius: 8px; padding: 0.28rem 0.6rem;
+    font-family: "DM Sans", sans-serif; font-size: 0.76rem; outline: none;
+    flex: 1; min-width: 160px; cursor: pointer;
+  }
+  #cp-site-bar select option { background: #0d1e30; color: var(--cream); }
+  .cp-tag {
+    display:flex; align-items:center; gap:0.3rem;
+    border-radius: 12px; padding: 0.15rem 0.5rem 0.15rem 0.45rem;
+    font-size: 0.7rem; color: #fff; cursor: pointer;
+  }
+  .cp-tag-x { opacity:0.7; font-size:0.75rem; margin-left:0.1rem; }
+  .cp-tag:hover .cp-tag-x { opacity:1; }
+
   #chart-btn {
     background: rgba(255,255,255,0.07); border: 1px solid rgba(46,134,193,0.3);
     color: var(--blue-pale); border-radius: 20px; padding: 0.25rem 0.7rem;
@@ -340,9 +338,7 @@
   <div class="stats">
     <div class="stat"><div class="stat-n" id="s-total">--</div><div class="stat-l">Sites</div></div>
     <div class="stat"><div class="stat-n" id="s-sources">--</div><div class="stat-l">Source Types</div></div>
-    <div class="stat"><div class="stat-n" id="s-collectors">--</div><div class="stat-l">Collectors</div></div>
     <div class="stat"><div class="stat-n" id="s-photos">--</div><div class="stat-l">Photos</div></div>
-    <a href="wq_charts.html" style="background:var(--mist);border:1px solid rgba(46,134,193,0.25);border-radius:8px;padding:0.28rem 0.65rem;font-size:0.72rem;color:var(--blue-pale);text-decoration:none;display:flex;align-items:center;gap:0.3rem;">📈 Charts</a>
   </div>
 </header>
 
@@ -433,12 +429,15 @@
   </div>
 
   <div id="cp-site-bar">
-    <label>Sites:</label>
-    <input type="text" id="cp-site-search" placeholder="Filter…"/>
-    <div id="cp-site-chips" style="display:flex;gap:0.4rem;flex-wrap:wrap;flex:1;"></div>
+    <label>Site:</label>
+    <select id="cp-site-select">
+      <option value="">— select a site —</option>
+    </select>
     <button class="cp-mode-btn active" id="cp-mode-single" title="Single site">Single</button>
     <button class="cp-mode-btn" id="cp-mode-multi" title="Compare multiple sites">Multi</button>
   </div>
+
+  <div id="cp-selected-tags" style="display:flex;gap:0.4rem;flex-wrap:wrap;padding:0.35rem 1.2rem 0;min-height:0;"></div>
 
   <div id="cp-date-bar">
     <span>From</span>
@@ -668,7 +667,7 @@ function render() {
   var q = document.getElementById("search-input").value.toLowerCase();
 
   var total = 0, photos = 0;
-  var sourceSet = new Set(), collectorSet = new Set();
+  var sourceSet = new Set();
 
   allRows.forEach(function(r) {
     var lat = parseFloat(r[C.lat]);
@@ -681,6 +680,16 @@ function render() {
     var rawPhoto  = r[C.photoDrive] || r[C.photoOrig] || "";
 
     if (q && !site.toLowerCase().includes(q) && !collector.toLowerCase().includes(q)) return;
+
+    // Fix 4: hide points with no value for the active parameter
+    if (activeParam !== "source") {
+      var colMap = { ec:C.ec, ph:C.ph, temp:C.temp, nitrate:C.nitrate, phosphate:C.phosphate, ecoli:C.ecoli };
+      var col = colMap[activeParam];
+      if (col !== undefined) {
+        var v = r[col];
+        if (!v || v === "" || isNaN(parseFloat(v))) return;
+      }
+    }
 
     var color = getColor(r);
     var icon = L.divIcon({
@@ -695,13 +704,11 @@ function render() {
 
     total++;
     sourceSet.add(source);
-    collectorSet.add(collector);
     if (rawPhoto) photos++;
   });
 
   document.getElementById("s-total").textContent      = total;
   document.getElementById("s-sources").textContent    = sourceSet.size;
-  document.getElementById("s-collectors").textContent = collectorSet.size;
   document.getElementById("s-photos").textContent     = photos;
   updateLegend();
 }
@@ -840,7 +847,6 @@ function makePopup(r, photoThumb, rawPhoto) {
       "<div class='pp-site'>" + esc(site) + "</div>" +
       "<div class='pp-meta'>" +
         "<b>Source:</b> " + esc(source) + "<br>" +
-        "<b>Collector:</b> " + esc(collector) + "<br>" +
         "<b>Date:</b> " + dateStr + (timeStr ? " at " + timeStr : "") +
       "</div>" +
       (params ? "<div class='pp-params'>" + params + "</div>" : "") +
@@ -931,7 +937,6 @@ function showDemo() {
   render();
   document.getElementById("s-total").textContent      = demo.length;
   document.getElementById("s-sources").textContent    = new Set(demo.map(function(d){return d.source;})).size;
-  document.getElementById("s-collectors").textContent = 1;
   document.getElementById("s-photos").textContent     = 0;
 }
 
@@ -1006,26 +1011,25 @@ var cpSiteColors    = {};
 var cpShowBands     = true;
 var cpAllSites      = [];
 
-function cpGetSiteColor(site) {
-  if (!cpSiteColors[site]) {
-    var idx = cpAllSites.indexOf(site);
-    cpSiteColors[site] = PALETTE[Math.max(idx,0) % PALETTE.length];
-  }
-  return cpSiteColors[site];
-}
-
 function cpOpen() {
-  // Derive site list from loaded data
   var siteSet = {};
   allRows.forEach(function(r){ var s = r[C.site]||""; if(s) siteSet[s]=true; });
   cpAllSites = Object.keys(siteSet).sort();
-  // Pre-assign colours
   cpAllSites.forEach(function(s,i){ cpSiteColors[s] = PALETTE[i % PALETTE.length]; });
+
+  // Populate dropdown
+  var sel = document.getElementById("cp-site-select");
+  sel.innerHTML = "<option value=''>— select a site —</option>";
+  cpAllSites.forEach(function(s) {
+    var opt = document.createElement("option");
+    opt.value = s; opt.textContent = s;
+    sel.appendChild(opt);
+  });
 
   document.getElementById("charts-panel").classList.add("open");
   document.getElementById("chart-btn").classList.add("active");
-  cpBuildSiteChips("");
   cpBuildCards();
+  cpRenderTags();
   cpRender();
 }
 
@@ -1034,29 +1038,23 @@ function cpClose() {
   document.getElementById("chart-btn").classList.remove("active");
 }
 
-function cpBuildSiteChips(q) {
-  var container = document.getElementById("cp-site-chips");
+function cpRenderTags() {
+  var container = document.getElementById("cp-selected-tags");
   container.innerHTML = "";
-  cpAllSites.filter(function(s){ return !q || s.toLowerCase().includes(q); })
-    .forEach(function(site) {
-      var chip = document.createElement("div");
-      chip.className = "cp-site-chip" + (cpSelectedSites.has(site) ? " active" : "");
-      chip.style.background = cpSelectedSites.has(site) ? cpSiteColors[site]+"22" : "";
-      chip.style.borderColor = cpSelectedSites.has(site) ? cpSiteColors[site] : "";
-      chip.innerHTML = "<div class='chip-dot' style='background:" + cpSiteColors[site] + "'></div>"
-                     + "<span>" + site + "</span>";
-      chip.addEventListener("click", function() {
-        if (cpSelectedSites.has(site)) {
-          cpSelectedSites.delete(site);
-        } else {
-          if (!cpMultiMode) cpSelectedSites.clear(); // single mode: clear first
-          cpSelectedSites.add(site);
-        }
-        cpBuildSiteChips(document.getElementById("cp-site-search").value.toLowerCase());
-        cpRender();
-      });
-      container.appendChild(chip);
+  cpSelectedSites.forEach(function(site) {
+    var tag = document.createElement("div");
+    tag.className = "cp-tag";
+    tag.style.background = cpSiteColors[site] || "#3393df";
+    tag.innerHTML = "<span>" + site + "</span><span class='cp-tag-x'>✕</span>";
+    tag.addEventListener("click", function() {
+      cpSelectedSites.delete(site);
+      cpRenderTags();
+      cpRender();
     });
+    container.appendChild(tag);
+  });
+  // Show/hide tag row
+  container.style.paddingBottom = cpSelectedSites.size > 0 ? "0.35rem" : "0";
 }
 
 function cpBuildCards() {
@@ -1072,7 +1070,7 @@ function cpBuildCards() {
       + "<div class='cp-card-unit'>" + p.unit + "</div>"
       + "</div>"
       + (p.hint ? "<div class='cp-card-hint'>" + p.hint + "</div>" : "")
-      + "<div class='cp-card-wrap'><canvas id='cpc-" + p.key + "'></canvas></div>";
+      + "<div class='cp-card-wrap' data-key='" + p.key + "'></div>";
     area.appendChild(card);
   });
 }
@@ -1096,8 +1094,12 @@ function cpRender() {
   var dateTo   = document.getElementById("cp-to").value;
 
   CP_PARAMS.forEach(function(p) {
-    var canvas = document.getElementById("cpc-" + p.key);
-    if (!canvas) return;
+    // Always find the card wrap first, then get or recreate canvas
+    var wrap = document.querySelector("#cp-charts .cp-card-wrap[data-key='" + p.key + "']");
+    if (!wrap) return;
+
+    // Destroy old chart
+    if (cpCharts[p.key]) { cpCharts[p.key].destroy(); delete cpCharts[p.key]; }
 
     // Filter rows to selected sites + date range, with a numeric value
     var filtered = allRows.filter(function(r) {
@@ -1120,25 +1122,16 @@ function cpRender() {
       bySite[s].sort(function(a,b){ return a.x < b.x ? -1 : 1; });
     });
 
-    // Destroy old
-    if (cpCharts[p.key]) { cpCharts[p.key].destroy(); delete cpCharts[p.key]; }
-
     var siteKeys = Object.keys(bySite);
 
-    // Restore canvas if replaced by no-data div
-    var wrap = canvas.parentElement;
-    if (!wrap.querySelector("canvas")) {
-      var nc = document.createElement("canvas");
-      nc.id = "cpc-" + p.key;
-      wrap.innerHTML = "";
-      wrap.appendChild(nc);
-      canvas = nc;
-    }
-
+    // Always recreate canvas fresh (avoids stale reference issues)
+    wrap.innerHTML = "";
     if (siteKeys.length === 0) {
       wrap.innerHTML = "<div class='cp-no-data'>" + (cpSelectedSites.size === 0 ? "Select a site →" : "No data for this parameter") + "</div>";
       return;
     }
+    var canvas = document.createElement("canvas");
+    wrap.appendChild(canvas);
 
     // Collect all x labels across sites
     var allX = [];
@@ -1240,19 +1233,26 @@ document.getElementById("cp-close-btn").addEventListener("click", cpClose);
 document.getElementById("cp-from").addEventListener("change", cpRender);
 document.getElementById("cp-to").addEventListener("change", cpRender);
 document.getElementById("cp-bands").addEventListener("change", function(){ cpShowBands = this.checked; cpRender(); });
-document.getElementById("cp-site-search").addEventListener("input", function(){
-  cpBuildSiteChips(this.value.toLowerCase());
+
+document.getElementById("cp-site-select").addEventListener("change", function() {
+  var site = this.value;
+  if (!site) return;
+  if (!cpMultiMode) cpSelectedSites.clear();
+  cpSelectedSites.add(site);
+  this.value = ""; // reset dropdown so same site can be re-selected in multi mode
+  cpRenderTags();
+  cpRender();
 });
+
 document.getElementById("cp-mode-single").addEventListener("click", function(){
   cpMultiMode = false;
   this.classList.add("active");
   document.getElementById("cp-mode-multi").classList.remove("active");
-  // Keep only the most recent selection
   if (cpSelectedSites.size > 1) {
     var last = Array.from(cpSelectedSites).pop();
     cpSelectedSites.clear();
     cpSelectedSites.add(last);
-    cpBuildSiteChips(document.getElementById("cp-site-search").value.toLowerCase());
+    cpRenderTags();
     cpRender();
   }
 });
