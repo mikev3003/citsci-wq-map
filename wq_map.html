@@ -479,9 +479,9 @@ const C = {
   ecoli:       13,
   notes:       14,
   siteDesc:    15,
-  collector:   17,
-  photoDrive:  18,
-  photoOrig:   18
+  photoDrive:  16,
+  photoOrig:   16
+  // Note: the sheet has no collector column — search is by site name only
 };
 
 // ── Map centred on South Africa ──
@@ -674,26 +674,26 @@ function render() {
     var lon = parseFloat(r[C.lon]);
     if (isNaN(lat) || isNaN(lon)) return;
 
-    // Guard: KoboToolbox GPS exports as "LAT LON ALT ACC" string.
-    // If the Apps Script or Sheets integration reads the wrong column / index,
-    // lat and lon can be swapped: lat gets the SA longitude (~16–33, positive)
-    // and lon gets the SA latitude (~-22 to -35, negative).
-    // Detect and correct both the swap and a simple missing-minus-sign case.
-    if (lat > 0 && lon < 0 && lat < 40 && lon > -40) {
-      // Classic swap: lat holds what should be lon (positive ~16-33)
-      // and lon holds what should be lat (negative ~-22 to -35)
-      var tmp = lat; lat = lon; lon = tmp;
+    // Guard: catches coordinate errors from the Kobo→Sheets pipeline.
+    // (a) SWAP: lat holds SA longitude (+16–33), lon holds SA latitude (-22 to -35).
+    //     Removed the lon>-40 lower bound — it excluded Americas test submissions
+    //     (lon≈-110). Post-swap points outside SA are dropped by the bounds check below.
+    // (b) MISSING MINUS: lat is positive, lon is already a valid SA eastern longitude.
+    if (lat > 0 && lon < 0) {
+      var tmp = lat; lat = lon; lon = tmp;   // swap back
     } else if (lat > 0 && lon > 10 && lon < 45) {
-      // Simple missing minus sign: lat is positive but lon is correct SA range
-      lat = -lat;
+      lat = -lat;                             // restore missing minus sign
     }
+    // Hard SA geographic filter: drop anything still outside Southern Africa
+    // after correction (genuine overseas tests, unrecoverable bad data, etc.)
+    // Bounds cover SA, Namibia, Mozambique, Lesotho, Eswatini.
+    if (lat > -15 || lat < -38 || lon < 10 || lon > 45) return;
 
     var site      = r[C.site]      || "";
-    var collector = r[C.collector] || "";
     var source    = r[C.source]    || "";
-    var rawPhoto  = r[C.photoDrive] || r[C.photoOrig] || "";
+    var rawPhoto  = r[C.photoDrive] || "";
 
-    if (q && !site.toLowerCase().includes(q) && !collector.toLowerCase().includes(q)) return;
+    if (q && !site.toLowerCase().includes(q)) return;
 
     // Fix 4: hide points with no value for the active parameter
     if (activeParam !== "source") {
@@ -748,7 +748,7 @@ function makePopup(r, photoThumb, rawPhoto) {
   var site      = r[C.site]      || "Unnamed Site";
   var date      = r[C.date]      || "";
   var time      = r[C.time]      || "";
-  var collector = r[C.collector] || "Unknown";
+  var collector = "";  // no collector column in sheet
   var source    = r[C.source]    || "";
   var ec        = r[C.ec]        || "";
   var ecRaw     = r[C.ecDisplay] || ec;
@@ -963,8 +963,6 @@ function showDemo() {
     r[C.ecoli]     = d.ecoli;
     r[C.source]    = d.source;
     r[C.notes]     = d.notes;
-    r[C.collector] = "Demo";
-    return r;
   });
   allRows = fakeRows;
   render();
