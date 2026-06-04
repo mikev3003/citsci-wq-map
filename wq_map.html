@@ -479,8 +479,9 @@ const C = {
   ecoli:       13,
   notes:       14,
   siteDesc:    15,
-  photoDrive:  16,
-  photoOrig:   16
+  collector:   17,
+  photoDrive:  18,
+  photoOrig:   18
 };
 
 // ── Map centred on South Africa ──
@@ -673,6 +674,20 @@ function render() {
     var lon = parseFloat(r[C.lon]);
     if (isNaN(lat) || isNaN(lon)) return;
 
+    // Guard: KoboToolbox GPS exports as "LAT LON ALT ACC" string.
+    // If the Apps Script or Sheets integration reads the wrong column / index,
+    // lat and lon can be swapped: lat gets the SA longitude (~16–33, positive)
+    // and lon gets the SA latitude (~-22 to -35, negative).
+    // Detect and correct both the swap and a simple missing-minus-sign case.
+    if (lat > 0 && lon < 0 && lat < 40 && lon > -40) {
+      // Classic swap: lat holds what should be lon (positive ~16-33)
+      // and lon holds what should be lat (negative ~-22 to -35)
+      var tmp = lat; lat = lon; lon = tmp;
+    } else if (lat > 0 && lon > 10 && lon < 45) {
+      // Simple missing minus sign: lat is positive but lon is correct SA range
+      lat = -lat;
+    }
+
     var site      = r[C.site]      || "";
     var collector = r[C.collector] || "";
     var source    = r[C.source]    || "";
@@ -686,7 +701,7 @@ function render() {
       var col = colMap[activeParam];
       if (col !== undefined) {
         var v = r[col];
-        if (!v || v === "" || isNaN(parseFloat(v))) return;
+        if (v === "" || v === null || v === undefined || isNaN(parseFloat(v))) return;
       }
     }
 
@@ -825,7 +840,7 @@ function makePopup(r, photoThumb, rawPhoto) {
 
   var commentsHtml = "";
   if (hasData) {
-    var flagItems = flags.map(function(f) {
+    var flagItems = allGood ? "" : flags.map(function(f) {
       var icon = f.cls === "good" ? "✓" : f.cls === "warn" ? "⚠" : "✕";
       return "<div class='pp-comment pp-comment-" + f.cls + "'>"
            + "<span class='pp-comment-icon'>" + icon + "</span>"
@@ -863,15 +878,15 @@ function makePopup(r, photoThumb, rawPhoto) {
 
 function openChartForSite(site) {
   map.closePopup();
-  // Open the charts panel, pre-selecting the site
-  if (!document.getElementById("charts-panel").classList.contains("open")) {
-    cpOpen();
-  }
-  // Add site to selection (respecting current mode)
+  // Set site selection first so cpOpen()/cpRender() already has it
   if (!cpMultiMode) cpSelectedSites.clear();
   cpSelectedSites.add(site);
-  cpRenderTags();
-  cpRender();
+  if (!document.getElementById("charts-panel").classList.contains("open")) {
+    cpOpen();  // cpOpen() calls cpRenderTags() + cpRender() with site already set
+  } else {
+    cpRenderTags();
+    cpRender();
+  }
 }
 
 function esc(s) {
@@ -953,9 +968,7 @@ function showDemo() {
   });
   allRows = fakeRows;
   render();
-  document.getElementById("s-total").textContent      = demo.length;
-  document.getElementById("s-sources").textContent    = new Set(demo.map(function(d){return d.source;})).size;
-  document.getElementById("s-photos").textContent     = 0;
+  // Stats are set correctly by render() above — no override needed
 }
 
 // ── Wire up controls ──
