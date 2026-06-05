@@ -636,16 +636,11 @@ function updateLegend() {
 }
 
 // ── Drive thumbnail ──
-// Converts a Drive share URL to a direct-load thumbnail URL.
-// Uses /thumbnail? for inline display (works without login for public files)
-// and /uc?export=view for the full-size link (forces direct download/view).
 function driveThumb(url) {
   if (!url) return "";
   var m = url.match(/\/file\/d\/([^\/\?]+)/);
   if (!m) return "";
-  // Use uc?export=view — more reliable than /thumbnail for public files
-  // and renders directly in an <img> tag without requiring Google login.
-  return "https://drive.google.com/uc?export=view&id=" + m[1];
+  return "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w600";
 }
 
 function driveViewUrl(url) {
@@ -776,9 +771,10 @@ function makePopup(r, photoThumb, rawPhoto) {
   var timeStr = time ? time.slice(0,5) : "";
 
   // Photo: shown inline in popup, clickable to open full lightbox
+  var fullUrl = rawPhoto ? driveViewUrl(rawPhoto) : "";
   var photoHtml = photoThumb
     ? "<img class='pp-photo' src='" + photoThumb + "' alt='Site photo' "
-      + "onclick=\"openPhoto('" + photoThumb.replace(/'/g,"\\'") + "','" + esc(site) + "')\" "
+      + "onclick=\"openPhoto('" + fullUrl.replace(/'/g,"\\'") + "','" + esc(site) + "')\" "
       + "onerror=\"this.style.display='none'\" title='Click to enlarge'>"
     : "<div class='pp-placeholder'>💧</div>";
 
@@ -911,9 +907,14 @@ function toast(msg, show) {
 }
 
 // ── Lightbox ──
-function openPhoto(url, site) {
+function openPhoto(viewUrl, site) {
+  // Convert the Drive view URL back to a high-res thumbnail for the lightbox img
+  var m = viewUrl.match(/\/file\/d\/([^\/\?]+)/);
+  var imgUrl = m
+    ? "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w1600"
+    : viewUrl;
   var overlay = document.getElementById("photo-overlay");
-  document.getElementById("photo-overlay-img").src = url;
+  document.getElementById("photo-overlay-img").src = imgUrl;
   document.getElementById("photo-overlay-caption").textContent = site || "";
   overlay.classList.add("open");
 }
