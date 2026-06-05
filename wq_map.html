@@ -636,11 +636,23 @@ function updateLegend() {
 }
 
 // ── Drive thumbnail ──
+// Converts a Drive share URL to a direct-load thumbnail URL.
+// Uses /thumbnail? for inline display (works without login for public files)
+// and /uc?export=view for the full-size link (forces direct download/view).
 function driveThumb(url) {
   if (!url) return "";
-  var m = url.match(/\/file\/d\/([^\/]+)\//);
+  var m = url.match(/\/file\/d\/([^\/\?]+)/);
   if (!m) return "";
-  return "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w800";
+  // Use uc?export=view — more reliable than /thumbnail for public files
+  // and renders directly in an <img> tag without requiring Google login.
+  return "https://drive.google.com/uc?export=view&id=" + m[1];
+}
+
+function driveViewUrl(url) {
+  if (!url) return "";
+  var m = url.match(/\/file\/d\/([^\/\?]+)/);
+  if (!m) return url;
+  return "https://drive.google.com/file/d/" + m[1] + "/view";
 }
 
 // ── Load data ──
@@ -771,7 +783,7 @@ function makePopup(r, photoThumb, rawPhoto) {
     : "<div class='pp-placeholder'>💧</div>";
 
   var driveLink = rawPhoto
-    ? "<a class='pp-drive' href='" + rawPhoto + "' target='_blank'>📷 View full photo &rarr;</a>" : "";
+    ? "<a class='pp-drive' href='" + driveViewUrl(rawPhoto) + "' target='_blank'>📷 View full photo &rarr;</a>" : "";
 
   var notesHtml = notes
     ? "<div class='pp-notes'>" + esc(notes) + "</div>" : "";
