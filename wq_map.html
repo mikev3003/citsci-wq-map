@@ -775,15 +775,14 @@ function makePopup(r, photoThumb, rawPhoto) {
   var dateStr = date ? date.slice(0,10) : "--";
   var timeStr = time ? time.slice(0,5) : "";
 
-  // Photo: clickable to open lightbox
+  // Photo: shown inline in popup, clickable to open full lightbox
   var photoHtml = photoThumb
     ? "<img class='pp-photo' src='" + photoThumb + "' alt='Site photo' "
       + "onclick=\"openPhoto('" + photoThumb.replace(/'/g,"\\'") + "','" + esc(site) + "')\" "
-      + "onerror=\"this.style.display='none'\">"
+      + "onerror=\"this.style.display='none'\" title='Click to enlarge'>"
     : "<div class='pp-placeholder'>💧</div>";
 
-  var driveLink = rawPhoto
-    ? "<a class='pp-drive' href='" + driveViewUrl(rawPhoto) + "' target='_blank'>📷 View full photo &rarr;</a>" : "";
+  var driveLink = "";
 
   var notesHtml = notes
     ? "<div class='pp-notes'>" + esc(notes) + "</div>" : "";
