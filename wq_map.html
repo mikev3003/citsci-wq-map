@@ -494,7 +494,55 @@ const satelliteLayer = L.tileLayer(
 ).addTo(map);
 L.control.layers({ "Street map": streetLayer, "Satellite": satelliteLayer }).addTo(map);
 
-const clusterGroup = L.markerClusterGroup({ maxClusterRadius: 35, showCoverageOnHover: false });
+// ── Colour severity ranking (worst quality = highest rank) ──
+const COLOR_RANK = {
+  "#A80000": 6,  // Exceeds SANS 241 (dark red)
+  "#b93333": 5,  // EC very poor
+  "#FD625E": 4,  // Phosphate SANS 241 limit
+  "#D83B01": 4,  // Temperature very warm
+  "#e06234": 3,  // Nitrate moderate concern
+  "#efb199": 2,  // EC poor / Phosphate moderate
+  "#C3E216": 2,  // pH acidic
+  "#99c9ef": 1,  // EC good / Temp optimal
+  "#66aee7": 1,  // Temp cool
+  "#3393df": 1,  // Nitrate ideal / E.coli not detected
+  "#107C10": 0,  // pH SANS 241 range (good)
+  "#005aa1": 0,  // Nitrate/Phosphate ideal
+};
+
+function worstClusterColor(markers) {
+  var bestRank = -1, bestColor = "#3393df";
+  markers.forEach(function(m) {
+    var rank = COLOR_RANK[m.options._wqColor] !== undefined ? COLOR_RANK[m.options._wqColor] : -1;
+    if (rank > bestRank) { bestRank = rank; bestColor = m.options._wqColor; }
+  });
+  return bestColor;
+}
+
+const clusterGroup = L.markerClusterGroup({
+  maxClusterRadius: 35,
+  showCoverageOnHover: false,
+  iconCreateFunction: function(cluster) {
+    var markers = cluster.getAllChildMarkers();
+    var color = worstClusterColor(markers);
+    var count = cluster.getChildCount();
+    return L.divIcon({
+      className: "",
+      html: "<div style='"
+        + "background:" + color + ";"
+        + "border:2px solid rgba(255,255,255,0.75);"
+        + "border-radius:50%;"
+        + "box-shadow:0 2px 8px rgba(0,0,0,0.45);"
+        + "width:34px;height:34px;"
+        + "display:flex;align-items:center;justify-content:center;"
+        + "font-size:12px;font-weight:700;color:#fff;"
+        + "text-shadow:0 1px 3px rgba(0,0,0,0.6);"
+        + "'>" + count + "</div>",
+      iconSize: [34, 34],
+      iconAnchor: [17, 17]
+    });
+  }
+});
 map.addLayer(clusterGroup);
 
 let allRows    = [];
@@ -634,17 +682,13 @@ function updateLegend() {
   d.innerHTML = html;
 }
 
-// ── Photo thumbnail ──
-// Handles Google Drive links and direct URLs (e.g. KoboToolbox)
+// ── Photo thumbnail — handles Google Drive and direct URLs (e.g. KoboToolbox) ──
 function driveThumb(url) {
   if (!url) return "";
-  // Google Drive: extract file ID and use thumbnail API
   var m = url.match(/\/file\/d\/([^\/]+)\//);
   if (m) return "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w800";
-  // Google Drive open?id= format
   var m2 = url.match(/[?&]id=([^&]+)/);
   if (m2 && url.includes("drive.google.com")) return "https://drive.google.com/thumbnail?id=" + m2[1] + "&sz=w800";
-  // Direct image URL (KoboToolbox, etc.) — use as-is
   if (url.match(/\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i) || url.includes("kc.kobotoolbox.org/media")) return url;
   return "";
 }
@@ -704,7 +748,7 @@ function render() {
       iconSize: [14,14], iconAnchor: [7,7], popupAnchor: [0,-10]
     });
 
-    var m = L.marker([lat, lon], { icon: icon });
+    var m = L.marker([lat, lon], { icon: icon, _wqColor: color });
     m.bindPopup(makePopup(r, driveThumb(rawPhoto), rawPhoto), { maxWidth: 370 });
     clusterGroup.addLayer(m);
 
@@ -1167,8 +1211,6 @@ function cpRender() {
     var maxY = 0;
     siteKeys.forEach(function(s){ bySite[s].forEach(function(pt){ if(pt.y>maxY) maxY=pt.y; }); });
     if (maxY === 0) maxY = 1;
-    // Only pull axis up to a band threshold if data is within 70% of it
-    // (keeps threshold lines visible when relevant, but avoids inflating axis for low readings)
     if (p.bands) {
       p.bands.forEach(function(b){
         if (b.to < 10000 && b.to > 0 && maxY > b.to * 0.7 && b.to > maxY) maxY = b.to;
