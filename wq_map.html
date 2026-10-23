@@ -1259,7 +1259,7 @@ const CP_TONES = {
 
 const CP_PARAMS = [
   { key:"ec",        label:"EC",             unit:"mS/m",   col:C.ec,
-    color:"#3393df",  hint:"Zones: irrigation fitness (WRC TT 727/17, Tier 1). Dashed line: SANS 241 drinking limit.",
+    color:"#3393df",  hint:"Zones: irrigation fitness (WRC TT 727/17, Tier 1). Dashed line: SANS 241 drinking limit (170 mS/m).",
     limits:[{value:170, label:"SANS 241 limit 170"}],
     bands:[
       {from:0,   to:106,   tone:"ideal",   label:"Ideal",        range:"< 106"},
@@ -1527,12 +1527,11 @@ function cpRender() {
       };
     });
 
-    // Threshold zones: coloured bands behind the bars, a name on each zone, dashed lines at the boundaries
+    // Threshold zones: coloured bands behind the bars with dashed boundary lines (zone names are in the key under each chart title)
     var annotations = {};
     var showZones = cpShowBands && p.bands && p.bands.length && !(p.key === "ec" && cpAllSelectedSaline());
     wrap.parentNode.classList.toggle("zones-off", !showZones);
     if (showZones) {
-      var plotH = Math.max(120, (wrap.clientHeight || 215) - 45);   // approximate plot height in px
       p.bands.forEach(function(band, i) {
         var capTo = band.to > 10000 ? yMax : Math.min(band.to, yMax);
         var capFrom = Math.max(Math.min(band.from, yMax), yMinAxis);
@@ -1540,14 +1539,6 @@ function cpRender() {
         var tone = CP_TONES[band.tone];
         annotations["zone" + i] = { type:"box", xScaleID:"x", yScaleID:"y", yMin:capFrom, yMax:capTo,
           backgroundColor:tone.fill, borderWidth:0, drawTime:"beforeDatasetsDraw" };
-        var frac = isLog ? (Math.log(capTo) - Math.log(capFrom)) / (Math.log(yMax) - Math.log(yMinAxis))
-                         : (capTo - capFrom) / (yMax - yMinAxis);
-        if (frac * plotH >= 15 && band.tone !== "neutral") {   // label zones tall enough to hold the name (the zone key covers the rest)
-          annotations["zonelabel" + i] = { type:"box", xScaleID:"x", yScaleID:"y", yMin:capFrom, yMax:capTo,
-            backgroundColor:"transparent", borderWidth:0, drawTime:"afterDatasetsDraw", z:2,
-            label:{ display:true, content:band.label, position:{ x:"end", y:"center" }, xAdjust:-4,
-                    color:tone.text, font:{ size:9, weight:"bold" }, backgroundColor:"rgba(255,255,255,0.72)", padding:{ x:3, y:1 }, borderRadius:3 } };
-        }
         var isLimit = (p.limits || []).some(function(l) { return l.value === band.from; });
         if (band.from > 0 && capFrom < yMax && !isLimit) {
           annotations["edge" + i] = { type:"line", scaleID:"y", value:band.from, borderColor:"rgba(40,60,90,0.35)",
@@ -1557,9 +1548,7 @@ function cpRender() {
       (p.limits || []).forEach(function(l, i) {
         if (l.value >= yMax) return;
         annotations["limit" + i] = { type:"line", scaleID:"y", value:l.value, borderColor:"rgba(10,34,64,0.85)",
-          borderWidth:1.5, borderDash:[6,3], drawTime:"afterDatasetsDraw", z:1,
-          label:{ display:true, content:l.label, position:"start", yAdjust:-8, color:"#0a2240",
-                  backgroundColor:"rgba(255,255,255,0.85)", font:{ size:9, weight:"bold" }, padding:{ x:3, y:1 } } };
+          borderWidth:1.5, borderDash:[6,3], drawTime:"afterDatasetsDraw", z:1 };
       });
     }
 
