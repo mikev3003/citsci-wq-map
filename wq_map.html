@@ -110,6 +110,11 @@
   .pp-photo { width:100%; height:220px; object-fit:cover; display:block;
               background:#060f1a; cursor:pointer; transition: opacity 0.15s; }
   .pp-photo:hover { opacity:0.9; }
+  .pp-photo-wrap { position:relative; height:220px; background:#060f1a; display:flex; align-items:center;
+                   justify-content:center; text-align:center; padding:0 1.3rem; }
+  .pp-photo-wrap .pp-photo { position:absolute; inset:0; width:100%; height:100%; }
+  .pp-photo-msg { font-size:0.74rem; line-height:1.55; color:rgba(244,249,253,0.62); }
+  .pp-photo-wrap.pp-photo-failed { height:112px; }
   .pp-placeholder { width:100%; height:80px;
     background: linear-gradient(135deg,#0a2240,#1a5276);
     display:flex; align-items:center; justify-content:center; font-size:2rem; }
@@ -169,9 +174,6 @@
   .pp-comment-info  { color:rgba(244,249,253,0.62); }
   .pp-comment-info  .pp-comment-icon { color:#8fa3b3; }
   .pp-comment-summary { font-size:0.7rem; color:#107C10; font-weight:500; }
-  .pp-drive { display:inline-block; margin-top:0.5rem; font-size:0.68rem;
-              color:var(--blue-pale); text-decoration:none; letter-spacing:0.05em; }
-  .pp-drive:hover { text-decoration:underline; }
 
   /* Legend */
   .legend { background:rgba(6,15,26,0.93); border:1px solid rgba(46,134,193,0.25);
@@ -910,6 +912,33 @@ function updateLegend() {
   d.innerHTML = html;
 }
 
+// A second Google address for the same Drive file, tried if the first one fails or hangs
+function photoAlt(url) {
+  if (!url) return "";
+  var m = url.match(/\/file\/d\/([^\/]+)\//) || (url.indexOf("drive.google.com") >= 0 ? url.match(/[?&]id=([^&]+)/) : null);
+  return m ? "https://lh3.googleusercontent.com/d/" + m[1] + "=w800" : "";
+}
+function photoLoaded(img) { img.setAttribute("data-ok", "1"); }
+function photoFail(img) {
+  var alt = img.getAttribute("data-alt");
+  if (alt) { img.removeAttribute("data-alt"); img.src = alt; photoWatch(img); return; }
+  var wrap = img.parentNode;
+  if (!wrap) return;
+  wrap.classList.add("pp-photo-failed");
+  wrap.innerHTML = "<span class='pp-photo-msg'>Photo can\u2019t be loaded here. Your network may be blocking Google Drive images.</span>";
+}
+// A blocked network can leave the request hanging with no error at all: give up on it after 6 seconds
+function photoWatch(img) {
+  var src = img.src;
+  setTimeout(function() {
+    if (img.isConnected && !img.getAttribute("data-ok") && img.src === src) photoFail(img);
+  }, 6000);
+}
+map.on("popupopen", function(e) {
+  var img = e.popup.getElement() && e.popup.getElement().querySelector("img.pp-photo");
+  if (img && !img.getAttribute("data-ok")) photoWatch(img);
+});
+
 // ── Photo thumbnail — handles Google Drive and direct URLs (e.g. KoboToolbox) ──
 function driveThumb(url) {
   if (!url) return "";
@@ -1029,13 +1058,11 @@ function makePopup(r, photoThumb, rawPhoto) {
 
   // Photo: clickable to open lightbox
   var photoHtml = photoThumb
-    ? "<img class='pp-photo' src='" + photoThumb + "' alt='Site photo' "
+    ? "<div class='pp-photo-wrap'><span class='pp-photo-msg'>Loading photo\u2026</span>"
+      + "<img class='pp-photo' src='" + photoThumb + "' data-alt='" + esc(photoAlt(rawPhoto)) + "' alt='Site photo' "
       + "onclick=\"openPhoto('" + photoThumb.replace(/'/g,"\\'") + "','" + esc(site).replace(/'/g,"\\'") + "')\" "
-      + "onerror=\"this.style.display='none'\">"
+      + "onload=\"photoLoaded(this)\" onerror=\"photoFail(this)\"></div>"
     : "<div class='pp-placeholder'>💧</div>";
-
-  var driveLink = rawPhoto
-    ? "<a class='pp-drive' href='" + esc(rawPhoto).replace(/'/g,"%27") + "' target='_blank'>📷 View full photo &rarr;</a>" : "";
 
   var notesHtml = notes
     ? "<div class='pp-notes'>" + esc(notes) + "</div>" : "";
@@ -1146,7 +1173,6 @@ function makePopup(r, photoThumb, rawPhoto) {
           "style='background:rgba(46,134,193,0.15);border:1px solid rgba(46,134,193,0.4);color:#aed6f1;" +
           "border-radius:14px;padding:0.22rem 0.7rem;font-size:0.68rem;cursor:pointer;font-family:DM Sans,sans-serif;'>"+
           "📈 View charts for this site</button>" : "") +
-        driveLink +
       "</div>" +
     "</div>";
 }
@@ -1181,6 +1207,11 @@ function openPhoto(url, site) {
   document.getElementById("photo-overlay-caption").textContent = site || "";
   overlay.classList.add("open");
 }
+document.getElementById("photo-overlay-img").addEventListener("error", function() {
+  if (document.getElementById("photo-overlay").classList.contains("open")) {
+    document.getElementById("photo-overlay-caption").textContent = "Photo can\u2019t be loaded here. Your network may be blocking Google Drive images.";
+  }
+});
 document.getElementById("photo-overlay-close").addEventListener("click", function() {
   document.getElementById("photo-overlay").classList.remove("open");
   document.getElementById("photo-overlay-img").src = "";
